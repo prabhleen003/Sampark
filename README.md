@@ -1,4 +1,5 @@
-# Sampark
+# Sampark(Ongoing)
+# open for contributions
 
 A community platform built with React, Express, and MongoDB.
 
