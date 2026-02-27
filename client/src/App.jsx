@@ -1,29 +1,35 @@
-import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Landing from './pages/Landing';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import ProfileSetup from './pages/ProfileSetup';
+import RegisterVehicle from './pages/RegisterVehicle';
+import AdminLayout from './layouts/AdminLayout';
+import Verifications from './pages/admin/Verifications';
+
+function PrivateRoute({ children }) {
+  return localStorage.getItem('token') ? children : <Navigate to="/login" replace />;
+}
 
 export default function App() {
-  const [health, setHealth] = useState(null);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    fetch('/api/health')
-      .then((res) => res.json())
-      .then(setHealth)
-      .catch(() => setError('Could not reach server'));
-  }, []);
-
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-950 text-white">
-      <div className="rounded-xl border border-gray-800 p-8 text-center">
-        <h1 className="mb-4 text-3xl font-bold">Sampark</h1>
-        {error && <p className="text-red-400">{error}</p>}
-        {health && (
-          <div className="space-y-1 text-sm text-gray-300">
-            <p>API: <span className="text-green-400">{health.status}</span></p>
-            <p>DB: <span className={health.db === 'connected' ? 'text-green-400' : 'text-yellow-400'}>{health.db}</span></p>
-          </div>
-        )}
-        {!health && !error && <p className="text-gray-500">Connecting...</p>}
-      </div>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/"                  element={<Landing />} />
+        <Route path="/login"             element={<Login />} />
+        <Route path="/profile-setup"     element={<PrivateRoute><ProfileSetup /></PrivateRoute>} />
+        <Route path="/dashboard"         element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+        <Route path="/vehicles/register" element={<PrivateRoute><RegisterVehicle /></PrivateRoute>} />
+        <Route path="/vehicles/resubmit/:vehicleId" element={<PrivateRoute><RegisterVehicle resubmit /></PrivateRoute>} />
+
+        {/* Admin — role guard is inside AdminLayout */}
+        <Route path="/admin" element={<PrivateRoute><AdminLayout /></PrivateRoute>}>
+          <Route index element={<Navigate to="/admin/verifications" replace />} />
+          <Route path="verifications" element={<Verifications />} />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
