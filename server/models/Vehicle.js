@@ -14,11 +14,14 @@ const vehicleSchema = new mongoose.Schema(
     },
     rejection_reason: { type: String, default: null },
     qr_token: { type: String, unique: true, sparse: true, default: null },
+    qr_image_url: { type: String, default: null },
     comm_mode: {
       type: String,
       enum: ['all', 'message_only', 'silent'],
       default: 'all',
     },
+    flagged_for_review: { type: Boolean, default: false },
+    qr_valid_until:     { type: Date,    default: null },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
 );

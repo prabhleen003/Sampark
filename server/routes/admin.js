@@ -38,20 +38,26 @@ router.put('/verifications/:vehicleId', async (req, res) => {
     return res.status(400).json({ success: false, message: 'rejection reason is required' });
   }
 
-  const update = action === 'approve'
-    ? { status: 'verified', rejection_reason: null }
-    : { status: 'rejected', rejection_reason: reason.trim() };
+  if (action === 'reject') {
+    const vehicle = await Vehicle.findByIdAndUpdate(
+      req.params.vehicleId,
+      { status: 'rejected', rejection_reason: reason.trim() },
+      { new: true }
+    ).populate('user_id', 'name phone_hash').select('-__v');
 
-  const vehicle = await Vehicle.findByIdAndUpdate(
-    req.params.vehicleId,
-    update,
-    { new: true }
-  ).populate('user_id', 'name phone_hash').select('-__v');
-
-  if (!vehicle) {
-    return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    return res.json({ success: true, vehicle });
   }
 
+  // Approve — set status to verified only. QR is generated after payment.
+  const vehicle = await Vehicle.findById(req.params.vehicleId);
+  if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
+
+  vehicle.status = 'verified';
+  vehicle.rejection_reason = null;
+  await vehicle.save();
+
+  await vehicle.populate('user_id', 'name phone_hash');
   res.json({ success: true, vehicle });
 });
 

@@ -6,8 +6,12 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import vehicleRoutes from './routes/vehicles.js';
 import adminRoutes from './routes/admin.js';
+import publicRoutes from './routes/public.js';
+import callLogRoutes from './routes/callLogs.js';
+import paymentRoutes from './routes/payments.js';
 import authMiddleware from './middleware/auth.js';
 import adminMiddleware from './middleware/adminAuth.js';
+import CallLog from './models/CallLog.js';
 
 dotenv.config();
 
@@ -37,6 +41,25 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/vehicles', vehicleRoutes);
 app.use('/api/v1/admin', authMiddleware, adminMiddleware, adminRoutes);
+app.use('/api/v1/v', publicRoutes);                        // public — no auth
+app.use('/api/v1/call-logs', authMiddleware, callLogRoutes);
+app.use('/api/v1/payments', authMiddleware, paymentRoutes);
+
+// Exotel webhook — no auth, Exotel posts here when call status updates
+app.post('/api/v1/webhooks/exotel', express.urlencoded({ extended: false }), async (req, res) => {
+  const { CallSid, Status, Duration } = req.body;
+  if (CallSid) {
+    const statusMap = { completed: 'completed', 'no-answer': 'no-answer', busy: 'busy', failed: 'failed' };
+    const mapped = statusMap[Status?.toLowerCase()] || null;
+    if (mapped) {
+      await CallLog.findOneAndUpdate(
+        { exotel_sid: CallSid },
+        { status: mapped, duration_seconds: parseInt(Duration) || null }
+      );
+    }
+  }
+  res.sendStatus(200);
+});
 
 // MongoDB connection
 mongoose.connect(process.env.MONGO_URI)

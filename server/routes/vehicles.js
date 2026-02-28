@@ -1,5 +1,6 @@
 import express from 'express';
 import Vehicle from '../models/Vehicle.js';
+import CallLog from '../models/CallLog.js';
 import authMiddleware from '../middleware/auth.js';
 import { uploadVehicleDocs } from '../middleware/upload.js';
 
@@ -69,6 +70,51 @@ router.get('/:id', authMiddleware, async (req, res) => {
     return res.status(404).json({ success: false, message: 'Vehicle not found' });
   }
   res.json({ success: true, vehicle });
+});
+
+// GET /api/v1/vehicles/:id/qr  (protected) — returns QR image for verified vehicle
+router.get('/:id/qr', authMiddleware, async (req, res) => {
+  const vehicle = await Vehicle.findOne({
+    _id: req.params.id,
+    user_id: req.user.userId,
+  }).select('status qr_image_url plate_number qr_token');
+
+  if (!vehicle) {
+    return res.status(404).json({ success: false, message: 'Vehicle not found' });
+  }
+  if (vehicle.status !== 'verified' || !vehicle.qr_image_url) {
+    return res.status(400).json({ success: false, message: 'QR code not available yet' });
+  }
+
+  res.json({
+    success: true,
+    qr_image_url: vehicle.qr_image_url,
+    plate_number: vehicle.plate_number,
+    qr_token: vehicle.qr_token,
+  });
+});
+
+// GET /api/v1/vehicles/:id/call-logs  (protected) — owner's activity feed
+router.get('/:id/call-logs', authMiddleware, async (req, res) => {
+  const vehicle = await Vehicle.findOne({ _id: req.params.id, user_id: req.user.userId }).select('_id');
+  if (!vehicle) {
+    return res.status(403).json({ success: false, message: 'Vehicle not found or access denied' });
+  }
+
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(50, parseInt(req.query.limit) || 20);
+  const skip  = (page - 1) * limit;
+
+  const [logs, total] = await Promise.all([
+    CallLog.find({ vehicle_id: req.params.id })
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limit)
+      .select('-__v'),
+    CallLog.countDocuments({ vehicle_id: req.params.id }),
+  ]);
+
+  res.json({ success: true, logs, total, page });
 });
 
 // PUT /api/v1/vehicles/:id  — resubmit docs for a rejected vehicle

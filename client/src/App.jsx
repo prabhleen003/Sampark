@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ProfileSetup from './pages/ProfileSetup';
 import RegisterVehicle from './pages/RegisterVehicle';
+import PublicScan from './pages/PublicScan';
 import AdminLayout from './layouts/AdminLayout';
 import Verifications from './pages/admin/Verifications';
 
@@ -27,6 +28,9 @@ export default function App() {
           <Route index element={<Navigate to="/admin/verifications" replace />} />
           <Route path="verifications" element={<Verifications />} />
         </Route>
+
+        {/* Public scan page — no auth required */}
+        <Route path="/v/:vehicleId" element={<PublicScan />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

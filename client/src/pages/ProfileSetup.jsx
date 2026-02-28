@@ -13,8 +13,8 @@ export default function ProfileSetup() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    gsap.from(cardRef.current,  { y: 30, opacity: 0, duration: 0.6, ease: 'power2.out' });
-    gsap.from(fieldRef.current, { y: 20, opacity: 0, duration: 0.5, delay: 0.2, ease: 'power2.out' });
+    gsap.from(cardRef.current,  { y: 30, duration: 0.6, ease: 'power2.out' });
+    gsap.from(fieldRef.current, { y: 20, duration: 0.5, delay: 0.2, ease: 'power2.out' });
   }, []);
 
   async function handleSubmit(e) {
