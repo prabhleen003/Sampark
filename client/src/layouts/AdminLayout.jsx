@@ -32,7 +32,8 @@ export default function AdminLayout() {
   }
 
   const navItems = [
-    { to: '/admin/verifications', label: 'Verifications', icon: '📋' },
+    { to: '/admin/verifications', label: 'Flagged Reviews', icon: '🔍' },
+    { to: '/admin/orders',        label: 'Orders',          icon: '📦' },
   ];
 
   const linkStyle = (isActive) => ({

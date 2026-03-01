@@ -2,6 +2,7 @@ import express from 'express';
 import CallLog from '../models/CallLog.js';
 import Vehicle from '../models/Vehicle.js';
 import AbuseReport from '../models/AbuseReport.js';
+import { refreshPrivacyScore } from '../utils/privacyScore.js';
 
 const router = express.Router();
 
@@ -41,6 +42,9 @@ router.post('/:logId/report', async (req, res) => {
   }
 
   res.json({ success: true, message: 'Report submitted. We\'ll review it shortly.' });
+  // Abuse report affects the reported vehicle owner's privacy score
+  const reportedVehicle = await Vehicle.findById(log.vehicle_id).select('user_id');
+  if (reportedVehicle) refreshPrivacyScore(reportedVehicle.user_id);
 });
 
 export default router;

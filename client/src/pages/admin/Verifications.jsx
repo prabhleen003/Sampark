@@ -29,7 +29,7 @@ function Toast({ msg, type, onDone }) {
       gsap.to(ref.current, { y: 40, duration: 0.3, ease: 'power2.in', onComplete: onDone });
     }, 2800);
     return () => clearTimeout(t);
-  }, []);
+  }, []); // eslint-disable-line
 
   return (
     <div ref={ref} style={{
@@ -99,8 +99,8 @@ function DocThumb({ label, url, onView }) {
   );
 }
 
-// ─── VehicleRow ───────────────────────────────────────────────────────────────
-function VehicleRow({ vehicle, onAction, onView }) {
+// ─── FlaggedRow ───────────────────────────────────────────────────────────────
+function FlaggedRow({ vehicle, onAction, onView }) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -117,39 +117,53 @@ function VehicleRow({ vehicle, onAction, onView }) {
   const phone = owner?.phone_hash || '';
   const maskedPhone = phone.length >= 4 ? '••••••' + phone.slice(-4) : '——';
 
+  const statusBadge = {
+    verification_failed:  { bg: '#7F1D1D', color: '#FCA5A5', border: '#EF4444' },
+    awaiting_digilocker:  { bg: '#1E3A5F', color: '#93C5FD', border: '#3B82F6' },
+    pending:              { bg: '#78350F', color: '#FCD34D', border: '#FCD34D' },
+    verified:             { bg: '#14532D', color: '#22C55E', border: '#22C55E' },
+  };
+  const sb = statusBadge[vehicle.status] || statusBadge.pending;
+
   return (
     <div ref={rowRef} style={{
       backgroundColor: C.slate,
       border: `1px solid ${C.border}`,
+      borderLeft: '4px solid #EF4444',
       borderRadius: '14px',
       padding: '20px 24px',
       marginBottom: '16px',
       overflow: 'hidden',
     }}>
       {/* Header row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
         <div>
           <span style={{ fontFamily: font.mono, fontSize: '1rem', fontWeight: 700, color: C.text }}>{vehicle.plate_number}</span>
           <p style={{ fontFamily: font.body, fontSize: '0.82rem', color: C.muted, margin: '4px 0 0' }}>
             {owner?.name || 'Unknown'} · +91 {maskedPhone}
           </p>
-          {vehicle.rejection_reason && (
-            <p style={{ fontFamily: font.body, fontSize: '0.8rem', color: C.danger, margin: '4px 0 0' }}>
-              Reason: {vehicle.rejection_reason}
+          {vehicle.verification_method && (
+            <p style={{ fontFamily: font.body, fontSize: '0.78rem', color: C.muted, margin: '2px 0 0' }}>
+              Method: {vehicle.verification_method} · Confidence: {vehicle.verification_confidence || 'unknown'}
             </p>
           )}
         </div>
         <span style={{
-          backgroundColor: vehicle.status === 'verified' ? '#14532D' : vehicle.status === 'rejected' ? '#7F1D1D' : '#78350F',
-          color: vehicle.status === 'verified' ? C.success : vehicle.status === 'rejected' ? '#FCA5A5' : '#FCD34D',
-          border: `1px solid ${vehicle.status === 'verified' ? C.success : vehicle.status === 'rejected' ? C.danger : '#FCD34D'}`,
+          backgroundColor: sb.bg, color: sb.color, border: `1px solid ${sb.border}`,
           borderRadius: '999px', padding: '3px 14px',
-          fontFamily: font.body, fontSize: '0.75rem', fontWeight: 600,
-          textTransform: 'capitalize',
+          fontFamily: font.body, fontSize: '0.75rem', fontWeight: 600, textTransform: 'capitalize',
         }}>
-          {vehicle.status}
+          {vehicle.status.replace(/_/g, ' ')}
         </span>
       </div>
+
+      {/* Failure reason */}
+      {vehicle.rejection_reason && (
+        <div style={{ backgroundColor: 'rgba(255,59,92,0.08)', border: '1px solid rgba(255,59,92,0.25)', borderRadius: '8px', padding: '8px 12px', marginBottom: '14px' }}>
+          <p style={{ fontFamily: font.body, color: C.danger, fontSize: '0.8rem', fontWeight: 600, margin: '0 0 2px' }}>Auto-verification reason:</p>
+          <p style={{ fontFamily: font.body, color: C.danger, fontSize: '0.82rem', margin: 0 }}>{vehicle.rejection_reason}</p>
+        </div>
+      )}
 
       {/* Documents */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '16px' }}>
@@ -158,54 +172,51 @@ function VehicleRow({ vehicle, onAction, onView }) {
         <DocThumb label="Plate" url={vehicle.plate_photo_url} onView={onView} />
       </div>
 
-      {/* Actions — only for pending */}
-      {vehicle.status === 'pending' && (
-        <div>
-          {!rejecting ? (
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={() => submit('approve')}
-                disabled={busy}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', cursor: busy ? 'not-allowed' : 'pointer', backgroundColor: '#14532D', color: C.success, fontFamily: font.body, fontWeight: 600, fontSize: '0.9rem' }}>
-                ✓ Approve
+      {/* Actions */}
+      <div>
+        {!rejecting ? (
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => submit('approve')}
+              disabled={busy}
+              style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', cursor: busy ? 'not-allowed' : 'pointer', backgroundColor: '#14532D', color: C.success, fontFamily: font.body, fontWeight: 600, fontSize: '0.9rem' }}>
+              ✓ Approve
+            </button>
+            <button
+              onClick={() => setRejecting(true)}
+              disabled={busy}
+              style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', cursor: busy ? 'not-allowed' : 'pointer', backgroundColor: '#7F1D1D', color: '#FCA5A5', fontFamily: font.body, fontWeight: 600, fontSize: '0.9rem' }}>
+              ✕ Reject
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <textarea
+              autoFocus
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="Enter rejection reason…"
+              rows={2}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                backgroundColor: C.navy, border: `1px solid ${C.danger}`,
+                borderRadius: '8px', padding: '10px', resize: 'none',
+                color: C.text, fontFamily: font.body, fontSize: '0.88rem', outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => setRejecting(false)}
+                style={{ flex: 1, padding: '9px', borderRadius: '8px', border: `1px solid ${C.border}`, cursor: 'pointer', backgroundColor: 'transparent', color: C.muted, fontFamily: font.body, fontSize: '0.88rem' }}>
+                Cancel
               </button>
-              <button
-                onClick={() => setRejecting(true)}
-                disabled={busy}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', cursor: busy ? 'not-allowed' : 'pointer', backgroundColor: '#7F1D1D', color: '#FCA5A5', fontFamily: font.body, fontWeight: 600, fontSize: '0.9rem' }}>
-                ✕ Reject
+              <button onClick={() => submit('reject')} disabled={!reason.trim() || busy}
+                style={{ flex: 1, padding: '9px', borderRadius: '8px', border: 'none', cursor: !reason.trim() || busy ? 'not-allowed' : 'pointer', backgroundColor: C.danger, color: '#fff', fontFamily: font.body, fontWeight: 600, fontSize: '0.88rem' }}>
+                Confirm Reject
               </button>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <textarea
-                autoFocus
-                value={reason}
-                onChange={e => setReason(e.target.value)}
-                placeholder="Enter rejection reason…"
-                rows={2}
-                style={{
-                  width: '100%', boxSizing: 'border-box',
-                  backgroundColor: C.navy, border: `1px solid ${C.danger}`,
-                  borderRadius: '8px', padding: '10px', resize: 'none',
-                  color: C.text, fontFamily: font.body, fontSize: '0.88rem',
-                  outline: 'none',
-                }}
-              />
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => setRejecting(false)}
-                  style={{ flex: 1, padding: '9px', borderRadius: '8px', border: `1px solid ${C.border}`, cursor: 'pointer', backgroundColor: 'transparent', color: C.muted, fontFamily: font.body, fontSize: '0.88rem' }}>
-                  Cancel
-                </button>
-                <button onClick={() => submit('reject')} disabled={!reason.trim() || busy}
-                  style={{ flex: 1, padding: '9px', borderRadius: '8px', border: 'none', cursor: !reason.trim() || busy ? 'not-allowed' : 'pointer', backgroundColor: C.danger, color: '#fff', fontFamily: font.body, fontWeight: 600, fontSize: '0.88rem' }}>
-                  Confirm Reject
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -213,10 +224,10 @@ function VehicleRow({ vehicle, onAction, onView }) {
 // ─── Stats Cards ──────────────────────────────────────────────────────────────
 function StatsRow({ stats }) {
   const cards = [
-    { label: 'Total Users',     value: stats.totalUsers,    color: '#60A5FA' },
-    { label: 'Total Vehicles',  value: stats.totalVehicles, color: '#A78BFA' },
-    { label: 'Pending Reviews', value: stats.pending,       color: '#FCD34D' },
-    { label: 'Verified',        value: stats.verified,      color: C.teal    },
+    { label: 'Total Users',          value: stats.totalUsers,          color: '#60A5FA' },
+    { label: 'Total Vehicles',       value: stats.totalVehicles,       color: '#A78BFA' },
+    { label: 'Flagged for Review',   value: stats.flaggedReviews,      color: '#FCD34D' },
+    { label: 'Verified',             value: stats.verified,            color: C.teal    },
   ];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px', marginBottom: '32px' }}>
@@ -238,7 +249,6 @@ function StatsRow({ stats }) {
 export default function Verifications() {
   const [vehicles, setVehicles]   = useState([]);
   const [stats, setStats]         = useState(null);
-  const [tab, setTab]             = useState('pending');
   const [loading, setLoading]     = useState(true);
   const [lightbox, setLightbox]   = useState(null);
   const [toast, setToast]         = useState(null);
@@ -247,10 +257,14 @@ export default function Verifications() {
     setToast({ msg, type, key: Date.now() });
   }
 
-  async function loadVehicles(status) {
+  async function loadVehicles() {
     setLoading(true);
-    const r = await api.get(`/admin/verifications?status=${status}`);
-    setVehicles(r.data.vehicles);
+    try {
+      const r = await api.get('/admin/flagged-reviews');
+      setVehicles(r.data.vehicles);
+    } catch {
+      setVehicles([]);
+    }
     setLoading(false);
   }
 
@@ -259,63 +273,44 @@ export default function Verifications() {
     setStats(r.data.stats);
   }
 
-  useEffect(() => { loadStats(); }, []);
-  useEffect(() => { loadVehicles(tab); }, [tab]);
+  useEffect(() => { loadStats(); loadVehicles(); }, []);
 
   async function handleAction(vehicleId, action, reason) {
     try {
-      await api.put(`/admin/verifications/${vehicleId}`, { action, reason });
+      await api.put(`/admin/flagged-reviews/${vehicleId}`, { action, reason });
       showToast(action === 'approve' ? 'Vehicle approved ✓' : 'Vehicle rejected', action === 'approve' ? 'success' : 'error');
       loadStats();
-      // Row animates itself out — remove from state after brief delay
       setTimeout(() => setVehicles(v => v.filter(x => x._id !== vehicleId)), 450);
     } catch {
       showToast('Action failed', 'error');
     }
   }
 
-  const TABS = ['pending', 'verified', 'rejected'];
-
   return (
     <div>
       <div style={{ marginBottom: '28px' }}>
         <h2 style={{ fontFamily: font.heading, fontSize: '1.6rem', fontWeight: 700, color: C.text, margin: '0 0 4px' }}>
-          Verification Queue
+          Flagged Reviews
         </h2>
         <p style={{ fontFamily: font.body, fontSize: '0.9rem', color: C.muted, margin: 0 }}>
-          Review and approve vehicle registrations.
+          Vehicles that failed auto-verification and require manual review.
         </p>
       </div>
 
       {/* Stats */}
       {stats && <StatsRow stats={stats} />}
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', backgroundColor: C.navy, borderRadius: '10px', padding: '4px', width: 'fit-content' }}>
-        {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            padding: '8px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-            fontFamily: font.body, fontSize: '0.88rem', fontWeight: 600,
-            backgroundColor: tab === t ? C.slate : 'transparent',
-            color: tab === t ? C.text : C.muted,
-            textTransform: 'capitalize',
-            transition: 'background 0.2s',
-          }}>
-            {t}
-          </button>
-        ))}
-      </div>
-
       {/* List */}
       {loading ? (
         <p style={{ fontFamily: font.body, color: C.muted, fontSize: '0.9rem' }}>Loading…</p>
       ) : vehicles.length === 0 ? (
         <div style={{ backgroundColor: C.slate, border: `2px dashed ${C.border}`, borderRadius: '14px', padding: '48px', textAlign: 'center' }}>
-          <p style={{ fontFamily: font.body, color: C.muted, margin: 0 }}>No {tab} vehicles.</p>
+          <p style={{ fontFamily: font.heading, fontSize: '1.1rem', color: C.text, margin: '0 0 8px' }}>All clear!</p>
+          <p style={{ fontFamily: font.body, color: C.muted, margin: 0 }}>No vehicles flagged for manual review.</p>
         </div>
       ) : (
         vehicles.map(v => (
-          <VehicleRow key={v._id} vehicle={v} onAction={handleAction} onView={setLightbox} />
+          <FlaggedRow key={v._id} vehicle={v} onAction={handleAction} onView={setLightbox} />
         ))
       )}
 

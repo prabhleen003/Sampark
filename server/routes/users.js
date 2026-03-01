@@ -1,6 +1,8 @@
 import express from 'express';
 import User from '../models/User.js';
 import authMiddleware from '../middleware/auth.js';
+import { checkQrExpiry }      from '../utils/expiryChecker.js';
+import { refreshPrivacyScore } from '../utils/privacyScore.js';
 
 const router = express.Router();
 
@@ -11,6 +13,13 @@ router.get('/me', authMiddleware, async (req, res) => {
     return res.status(404).json({ success: false, message: 'User not found' });
   }
   res.json({ success: true, user });
+
+  // Fire-and-forget background tasks after response is sent
+  checkQrExpiry(req.user.userId);
+  // Only refresh score if it hasn't been calculated recently (within 5 min) to avoid spam
+  if (!user.privacy_score_at || (Date.now() - new Date(user.privacy_score_at).getTime()) > 5 * 60 * 1000) {
+    refreshPrivacyScore(req.user.userId);
+  }
 });
 
 // PUT /api/v1/users/me  (protected)
