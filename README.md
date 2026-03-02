@@ -55,30 +55,43 @@ Your phone number is **never exposed**. It's encrypted at rest and never sent to
 
 ## Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Client (React 18)                        │
-│  Landing · Login · Dashboard · RegisterVehicle · PublicScan      │
-│  ProfileSetup · ClaimVehicle · Settings · Admin Panel            │
-└──────────────────────┬──────────────────────────────────────────┘
-                       │  REST /api/v1  (Vite proxy in dev)
-┌──────────────────────▼──────────────────────────────────────────┐
-│                     Server (Express.js)                           │
-│                                                                   │
-│  /auth      /users     /vehicles    /v/:id    /admin             │
-│  OTP+JWT    Settings   CRUD+QR      Public    Verif+Abuse        │
-│             Privacy    Transfer     Scan      Blocklist           │
-│             Export     CallLogs     Message                       │
-│                        Payments     Call                          │
-│                        Orders       Emergency                     │
-└──────┬───────────────────────┬──────────────────────────────────┘
-       │                       │
-┌──────▼──────┐        ┌───────▼──────────┐
-│  MongoDB    │        │  External APIs   │
-│  Atlas      │        │  Exotel (calls)  │
-│  Mumbai     │        │  PayU (payments) │
-└─────────────┘        │  DigiLocker (KYC)│
-                       └──────────────────┘
+```mermaid
+graph TD
+    subgraph Client["Client — React 18 + Vite"]
+        Landing["Landing"]
+        Login["Login"]
+        Dashboard["Dashboard"]
+        PublicScan["PublicScan"]
+        Register["RegisterVehicle"]
+        Claim["ClaimVehicle"]
+        Settings["Settings"]
+        Admin["Admin Panel"]
+    end
+
+    subgraph Server["Server — Express.js"]
+        Auth["/auth\nOTP · JWT"]
+        Users["/users\nSettings · Privacy\nExport · Score"]
+        Vehicles["/vehicles\nCRUD · QR\nTransfer · CallLogs\nPayments · Orders"]
+        Public["/v/:id\nMessage · Call\nEmergency"]
+        AdminRoutes["/admin\nVerification\nAbuse · Blocklist\nSuspension"]
+    end
+
+    subgraph Data["Persistence"]
+        MongoDB[("MongoDB Atlas\nMumbai")]
+    end
+
+    subgraph External["External APIs"]
+        Exotel["Exotel\nMasked Calls"]
+        PayU["PayU\nPayments"]
+        DigiLocker["DigiLocker\nKYC"]
+    end
+
+    Client -- "REST /api/v1\nVite proxy in dev" --> Server
+    Server --> MongoDB
+    Vehicles --> Exotel
+    Vehicles --> PayU
+    Vehicles --> DigiLocker
+    Public --> Exotel
 ```
 
 ---
