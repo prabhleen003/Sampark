@@ -1,6 +1,6 @@
 <div align="center">
 
-# Sampark — Privacy-First Vehicle Identity Platform
+# Sampark — Privacy-First Vehicle Identity Platform (Ongoing Project)
 
 **Connect with your vehicle without exposing your phone number**
 
