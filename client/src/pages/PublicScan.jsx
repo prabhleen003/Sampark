@@ -4,21 +4,50 @@ import { useParams, useSearchParams } from 'react-router-dom';
 const API_BASE = 'http://localhost:5000/api/v1';
 
 const C = {
-  bg: '#0A0F2C',
-  card: '#0D1438',
-  border: 'rgba(148,163,184,0.14)',
-  teal: '#00E5A0',
-  tealDark: '#00CC8E',
-  blue: '#3B82F6',
-  danger: '#FF3B5C',
-  textPrimary: '#F1F5F9',
+  bg:            '#0A0F2C',
+  card:          '#0D1438',
+  border:        'rgba(148,163,184,0.14)',
+  teal:          '#00E5A0',
+  blue:          '#3B82F6',
+  danger:        '#FF3B5C',
+  amber:         '#F59E0B',
+  textPrimary:   '#F1F5F9',
   textSecondary: '#94A3B8',
-  mono: 'JetBrains Mono, monospace',
+  mono:          'JetBrains Mono, monospace',
 };
 
 const PHONE_RE = /^[6-9]\d{9}$/;
 
-// ── Shared helpers ─────────────────────────────────────────────────────────────
+// ── Haptic helper ──────────────────────────────────────────────────────────────
+function buzz(pattern = 50) {
+  if (navigator.vibrate) navigator.vibrate(pattern);
+}
+
+// ── Skeleton pulse ─────────────────────────────────────────────────────────────
+function Skeleton({ width = '100%', height = '40px', radius = '10px', style: s = {} }) {
+  return (
+    <div style={{
+      width, height, borderRadius: radius,
+      background: 'linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%)',
+      backgroundSize: '200% 100%',
+      animation: 'skeletonPulse 1.4s ease-in-out infinite',
+      ...s,
+    }} />
+  );
+}
+
+// ── Bottom sheet ───────────────────────────────────────────────────────────────
+function BottomSheet({ onClose, children }) {
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 100, backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '480px', margin: '0 auto', backgroundColor: C.card, borderTopLeftRadius: '20px', borderTopRightRadius: '20px', border: `1px solid ${C.border}`, padding: '1.5rem 1.25rem', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ width: '40px', height: '4px', borderRadius: '2px', backgroundColor: C.border, margin: '0 auto 1.25rem' }} />
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function btnStyle(bg, color, disabled = false) {
   return {
     width: '100%', padding: '14px', borderRadius: '10px', border: 'none',
@@ -35,36 +64,8 @@ const outlineBtn = {
   color: '#94A3B8', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer',
 };
 
-function BottomSheet({ onClose, children }) {
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 100,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        display: 'flex', alignItems: 'flex-end',
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: '480px', margin: '0 auto',
-          backgroundColor: C.card,
-          borderTopLeftRadius: '20px', borderTopRightRadius: '20px',
-          border: `1px solid ${C.border}`,
-          padding: '1.5rem 1.25rem',
-          maxHeight: '85vh', overflowY: 'auto',
-        }}
-      >
-        <div style={{ width: '40px', height: '4px', borderRadius: '2px', backgroundColor: C.border, margin: '0 auto 1.25rem' }} />
-        {children}
-      </div>
-    </div>
-  );
-}
-
 const FALLBACK_TEMPLATES = [
-  'Please move your vehicle — it\'s blocking mine',
+  "Please move your vehicle — it's blocking mine",
   'Your car lights are on',
   'Urgent — please call back',
   'Your car is being towed',
@@ -78,302 +79,264 @@ const URGENCY_CONFIG = {
 
 // ── Call Panel ────────────────────────────────────────────────────────────────
 function CallPanel({ vehicleId, sig, onClose }) {
-  // step: 'phone' | 'ringing' | 'connected' | 'fallback' | 'sent' | 'expired'
-  const [step, setStep]           = useState('phone');
-  const [phone, setPhone]         = useState('');
-  const [phoneErr, setPhoneErr]   = useState('');
-  const [callErr, setCallErr]     = useState('');
-  const [callLogId, setCallLogId] = useState(null);
+  const [step, setStep]     = useState('phone');
+  const [phone, setPhone]   = useState('');
+  const [phoneErr, setPhoneErr] = useState('');
+  const [callErr, setCallErr]   = useState('');
   const [fallbackToken, setFallbackToken] = useState(null);
-  const [urgency, setUrgency]     = useState('urgent');
+  const [urgency, setUrgency]   = useState('urgent');
   const [selectedTpl, setSelectedTpl] = useState(null);
-  const [customMsg, setCustomMsg] = useState('');
-  const [sending, setSending]     = useState(false);
-  const [sendErr, setSendErr]     = useState('');
+  const [customMsg, setCustomMsg]   = useState('');
+  const [sending, setSending]   = useState(false);
+  const [sendErr, setSendErr]   = useState('');
   const pollRef = useRef(null);
   const pollCount = useRef(0);
 
-  // Stop polling on unmount
   useEffect(() => () => clearInterval(pollRef.current), []);
 
   function startPolling(logId) {
     pollCount.current = 0;
     pollRef.current = setInterval(async () => {
-      pollCount.current += 1;
-      // Stop after 60 seconds (12 polls × 5s)
-      if (pollCount.current > 12) {
-        clearInterval(pollRef.current);
-        setStep('phone');
-        setCallErr('Call timed out. Please try again.');
-        return;
-      }
+      pollCount.current++;
+      if (pollCount.current > 40) { clearInterval(pollRef.current); setStep('phone'); return; }
       try {
         const r = await fetch(`${API_BASE}/v/${vehicleId}/call-status/${logId}`);
         const data = await r.json();
-        if (!data.success) return;
-        const s = data.status;
-        if (s === 'completed') {
+        if (['completed', 'no-answer', 'busy', 'failed'].includes(data.status)) {
           clearInterval(pollRef.current);
-          setStep('connected');
-        } else if (['no-answer', 'busy', 'failed'].includes(s)) {
-          clearInterval(pollRef.current);
-          if (data.fallback_token) {
-            setFallbackToken(data.fallback_token);
-            setStep('fallback');
-          } else {
-            setStep('phone');
-            setCallErr('Call didn\'t go through. Please try again.');
-          }
+          if (data.status === 'completed') { setStep('connected'); }
+          else { setFallbackToken(data.fallback_token || null); setStep('fallback'); }
         }
-        // 'ringing' / 'initiated' → keep polling
-      } catch {
-        // network blip — keep polling
-      }
-    }, 5000);
+      } catch {}
+    }, 3000);
   }
 
-  function handleCall() {
+  async function handleCall() {
     if (!PHONE_RE.test(phone)) { setPhoneErr('Enter a valid 10-digit Indian number'); return; }
-    setPhoneErr('');
-    setCallErr('');
-    setStep('ringing');
-
-    fetch(`${API_BASE}/v/${vehicleId}/call`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sig, caller_phone: phone }),
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success && data.call_log_id) {
-          setCallLogId(data.call_log_id);
-          startPolling(data.call_log_id);
-        } else {
-          setCallErr(data.message || 'Call failed');
-          setStep('phone');
-        }
-      })
-      .catch(() => { setCallErr('Network error. Please try again.'); setStep('phone'); });
-  }
-
-  async function handleSendFallback() {
-    const message = selectedTpl !== null ? FALLBACK_TEMPLATES[selectedTpl] : customMsg.trim();
-    if (!message) { setSendErr('Please select or type a message.'); return; }
-    setSendErr('');
-    setSending(true);
+    setPhoneErr(''); setCallErr('');
     try {
-      const r = await fetch(`${API_BASE}/v/${vehicleId}/fallback-message`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fallback_token: fallbackToken, message, urgency }),
+      const r = await fetch(`${API_BASE}/v/${vehicleId}/call`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sig, caller_phone: phone }),
       });
       const data = await r.json();
-      if (data.success) {
-        setStep('sent');
-      } else if (r.status === 410) {
-        setStep('expired');
-      } else {
-        setSendErr(data.message || 'Failed to send. Please try again.');
-      }
-    } catch {
-      setSendErr('Network error. Please try again.');
-    } finally {
-      setSending(false);
-    }
+      if (r.status === 403) { setStep('blocked'); return; }
+      if (!data.success) { setCallErr(data.message || 'Failed to initiate call'); return; }
+      setStep('ringing');
+      startPolling(data.call_log_id);
+    } catch { setCallErr('Network error. Please try again.'); }
+  }
+
+  async function handleFallbackSend() {
+    const msg = selectedTpl !== null ? FALLBACK_TEMPLATES[selectedTpl] : customMsg.trim();
+    if (!msg) return;
+    setSending(true); setSendErr('');
+    try {
+      const r = await fetch(`${API_BASE}/v/${vehicleId}/fallback-message`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fallback_token: fallbackToken, message: msg, urgency }),
+      });
+      const data = await r.json();
+      if (data.success) setStep('sent');
+      else setSendErr(data.message || 'Failed to send message');
+    } catch { setSendErr('Network error.'); }
+    finally { setSending(false); }
   }
 
   return (
-    <BottomSheet onClose={step === 'ringing' ? undefined : onClose}>
-
-      {/* Phone entry */}
+    <BottomSheet onClose={step !== 'ringing' ? onClose : undefined}>
       {step === 'phone' && (
         <>
-          <h3 style={{ color: C.textPrimary, fontWeight: 700, fontSize: '1rem', margin: '0 0 6px' }}>Your phone number</h3>
-          <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: '0 0 1rem', lineHeight: 1.5 }}>
-            Your number is used only to connect the call. It will not be shared with the vehicle owner.
-          </p>
-          <input
-            type="tel" inputMode="numeric" maxLength={10}
-            value={phone}
-            onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setPhoneErr(''); setCallErr(''); }}
-            placeholder="10-digit mobile number"
-            autoFocus
-            style={{ width: '100%', boxSizing: 'border-box', padding: '14px', borderRadius: '10px', border: `1px solid ${phoneErr ? C.danger : C.border}`, backgroundColor: 'rgba(255,255,255,0.05)', color: C.textPrimary, fontSize: '1rem', outline: 'none', marginBottom: '6px' }}
-          />
+          <h3 style={{ color: C.blue, fontWeight: 700, fontSize: '1.05rem', margin: '0 0 4px' }}>📞 Call Vehicle Owner</h3>
+          <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: '0 0 1rem', lineHeight: 1.5 }}>Your number connects you — the owner won't see it until they pick up.</p>
+          <input type="tel" inputMode="numeric" maxLength={10} value={phone} onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setPhoneErr(''); }} placeholder="10-digit mobile number" autoFocus
+            style={{ width: '100%', boxSizing: 'border-box', padding: '14px', borderRadius: '10px', border: `1px solid ${phoneErr ? C.danger : C.border}`, backgroundColor: 'rgba(255,255,255,0.05)', color: C.textPrimary, fontSize: '1rem', outline: 'none', marginBottom: '6px' }} />
           {phoneErr && <p style={{ color: C.danger, fontSize: '0.8rem', margin: '0 0 8px' }}>{phoneErr}</p>}
           {callErr  && <p style={{ color: C.danger, fontSize: '0.8rem', margin: '0 0 8px' }}>{callErr}</p>}
           <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
             <button onClick={onClose} style={outlineBtn}>Cancel</button>
-            <button onClick={handleCall} disabled={phone.length !== 10} style={btnStyle(C.blue, '#fff', phone.length !== 10)}>
-              Connect Call
-            </button>
+            <button onClick={handleCall} disabled={phone.length !== 10} style={btnStyle(C.blue, '#fff', phone.length !== 10)}>Call Now</button>
           </div>
         </>
       )}
-
-      {/* Ringing — polling */}
       {step === 'ringing' && (
-        <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>📲</div>
-          <p style={{ color: C.textPrimary, fontWeight: 700, fontSize: '1rem', margin: '0 0 6px' }}>Calling vehicle owner…</p>
-          <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: 0 }}>Please wait — checking if they pick up</p>
+        <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📳</div>
+          <p style={{ color: C.textPrimary, fontWeight: 700, fontSize: '1rem', margin: '0 0 6px' }}>Connecting…</p>
+          <p style={{ color: C.textSecondary, fontSize: '0.85rem', margin: 0 }}>Ringing the vehicle owner. Please wait.</p>
         </div>
       )}
-
-      {/* Connected */}
       {step === 'connected' && (
         <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>✅</div>
-          <p style={{ color: C.teal, fontWeight: 700, fontSize: '1.1rem', margin: '0 0 6px' }}>Call connected!</p>
-          <p style={{ color: C.textSecondary, fontSize: '0.85rem', margin: '0 0 1.5rem' }}>
-            You can close this page.
-          </p>
-          <button onClick={onClose} style={btnStyle(C.blue, '#fff')}>Done</button>
+          <p style={{ color: C.teal, fontWeight: 700, fontSize: '1.1rem', margin: '0 0 6px' }}>Connected!</p>
+          <button onClick={onClose} style={{ ...btnStyle(C.teal, '#0A0F2C'), marginTop: '1rem' }}>Done</button>
         </div>
       )}
-
-      {/* Fallback message form */}
+      {step === 'blocked' && (
+        <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🚫</div>
+          <p style={{ color: C.textSecondary, fontWeight: 700, fontSize: '1rem', margin: '0 0 8px' }}>Unable to contact this vehicle at this time.</p>
+          <button onClick={onClose} style={{ ...btnStyle('rgba(148,163,184,0.2)', C.textSecondary), marginTop: '1rem' }}>Close</button>
+        </div>
+      )}
       {step === 'fallback' && (
         <>
-          <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📵</div>
-            <p style={{ color: C.textPrimary, fontWeight: 700, fontSize: '1rem', margin: '0 0 4px' }}>Owner didn't answer</p>
-            <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: 0 }}>Leave them a message instead?</p>
-          </div>
-
-          {/* Urgency chips */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem' }}>
+          <h3 style={{ color: C.amber, fontWeight: 700, fontSize: '1rem', margin: '0 0 4px' }}>📵 No Answer</h3>
+          <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: '0 0 1rem', lineHeight: 1.5 }}>The owner didn't pick up. Leave a quick message — they'll be notified.</p>
+          {FALLBACK_TEMPLATES.map((t, i) => (
+            <button key={i} onClick={() => { setSelectedTpl(i); setCustomMsg(''); }}
+              style={{ width: '100%', textAlign: 'left', padding: '11px 14px', borderRadius: '10px', marginBottom: '8px', border: `1px solid ${selectedTpl === i ? C.teal : C.border}`, backgroundColor: selectedTpl === i ? 'rgba(0,229,160,0.08)' : 'rgba(255,255,255,0.03)', color: selectedTpl === i ? C.teal : C.textPrimary, cursor: 'pointer', fontSize: '0.88rem' }}>
+              {t}
+            </button>
+          ))}
+          <textarea placeholder="Or type a custom message…" value={customMsg} onChange={e => { setCustomMsg(e.target.value.slice(0, 300)); setSelectedTpl(null); }}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '10px', border: `1px solid ${C.border}`, backgroundColor: 'rgba(255,255,255,0.04)', color: C.textPrimary, fontSize: '0.9rem', outline: 'none', resize: 'none', height: '80px', marginBottom: '10px' }} />
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
             {Object.entries(URGENCY_CONFIG).map(([key, cfg]) => (
-              <button
-                key={key}
-                onClick={() => setUrgency(key)}
-                style={{ flex: 1, padding: '8px 4px', borderRadius: '8px', border: `1px solid ${urgency === key ? cfg.border : C.border}`, backgroundColor: urgency === key ? cfg.bg : 'transparent', color: urgency === key ? cfg.color : C.textSecondary, fontWeight: urgency === key ? 700 : 500, fontSize: '0.8rem', cursor: 'pointer' }}
-              >
+              <button key={key} onClick={() => setUrgency(key)}
+                style={{ flex: 1, padding: '8px', borderRadius: '8px', border: `1px solid ${urgency === key ? cfg.border : C.border}`, backgroundColor: urgency === key ? cfg.bg : 'transparent', color: urgency === key ? cfg.color : C.textSecondary, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}>
                 {cfg.label}
               </button>
             ))}
           </div>
-
-          {/* Template quick picks */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
-            {FALLBACK_TEMPLATES.map((tpl, i) => (
-              <button
-                key={i}
-                onClick={() => { setSelectedTpl(selectedTpl === i ? null : i); setCustomMsg(''); }}
-                style={{ padding: '10px 12px', borderRadius: '10px', textAlign: 'left', border: `1px solid ${selectedTpl === i ? C.teal : C.border}`, backgroundColor: selectedTpl === i ? 'rgba(0,229,160,0.1)' : 'rgba(255,255,255,0.04)', color: selectedTpl === i ? C.teal : C.textPrimary, fontWeight: 500, fontSize: '0.88rem', cursor: 'pointer' }}
-              >
-                {tpl}
-              </button>
-            ))}
-          </div>
-
-          {/* Custom text */}
-          <textarea
-            rows={3} maxLength={300}
-            value={customMsg}
-            onChange={e => { setCustomMsg(e.target.value); if (e.target.value) setSelectedTpl(null); }}
-            placeholder="Or type a custom message…"
-            style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '10px', border: `1px solid ${C.border}`, backgroundColor: 'rgba(255,255,255,0.05)', color: C.textPrimary, fontSize: '0.9rem', resize: 'none', outline: 'none', marginBottom: '4px' }}
-          />
-          <p style={{ color: C.textSecondary, fontSize: '0.75rem', textAlign: 'right', margin: '0 0 10px' }}>{customMsg.length}/300</p>
-
           {sendErr && <p style={{ color: C.danger, fontSize: '0.8rem', margin: '0 0 8px' }}>{sendErr}</p>}
-
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={onClose} style={outlineBtn}>Cancel</button>
-            <button
-              onClick={handleSendFallback}
-              disabled={sending || (selectedTpl === null && !customMsg.trim())}
-              style={btnStyle(C.teal, '#0A0F2C', sending || (selectedTpl === null && !customMsg.trim()))}
-            >
+            <button onClick={onClose} style={outlineBtn}>Skip</button>
+            <button onClick={handleFallbackSend} disabled={sending || (selectedTpl === null && !customMsg.trim())} style={btnStyle(C.teal, '#0A0F2C', sending || (selectedTpl === null && !customMsg.trim()))}>
               {sending ? 'Sending…' : 'Send Message'}
             </button>
           </div>
         </>
       )}
-
-      {/* Sent confirmation */}
       {step === 'sent' && (
         <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>✓</div>
-          <p style={{ color: C.teal, fontWeight: 700, fontSize: '1.1rem', margin: '0 0 8px' }}>Message delivered!</p>
-          <p style={{ color: C.textSecondary, fontSize: '0.85rem', margin: '0 0 6px', lineHeight: 1.6 }}>
-            The vehicle owner will see it when they check their Sampaark dashboard.
-          </p>
-          {urgency === 'emergency' && (
-            <p style={{ color: '#FF3B5C', fontSize: '0.82rem', fontWeight: 600, margin: '0 0 1.5rem' }}>
-              Emergency contacts have also been notified.
-            </p>
-          )}
-          {urgency !== 'emergency' && <div style={{ marginBottom: '1.5rem' }} />}
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>✅</div>
+          <p style={{ color: C.teal, fontWeight: 700, fontSize: '1rem', margin: '0 0 6px' }}>Message sent!</p>
+          <p style={{ color: C.textSecondary, fontSize: '0.85rem', margin: '0 0 1.5rem' }}>The owner has been notified.</p>
           <button onClick={onClose} style={btnStyle(C.teal, '#0A0F2C')}>Done</button>
         </div>
       )}
+    </BottomSheet>
+  );
+}
 
-      {/* Token expired */}
-      {step === 'expired' && (
+// ── Message Panel ─────────────────────────────────────────────────────────────
+function MessagePanel({ vehicleId, sig, templates, onClose }) {
+  const [step, setStep]         = useState('pick');
+  const [selected, setSelected] = useState(null);
+  const [custom, setCustom]     = useState('');
+  const [phone, setPhone]       = useState('');
+  const [phoneErr, setPhoneErr] = useState('');
+  const [sending, setSending]   = useState(false);
+  const [error, setError]       = useState('');
+
+  async function handleSend() {
+    if (!PHONE_RE.test(phone)) { setPhoneErr('Enter a valid 10-digit Indian number'); return; }
+    setPhoneErr(''); setSending(true);
+    try {
+      const r = await fetch(`${API_BASE}/v/${vehicleId}/message`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sig, sender_phone: phone, template_id: selected || undefined, custom_text: custom.trim() || undefined }),
+      });
+      const data = await r.json();
+      if (r.status === 403) { setStep('blocked'); return; }
+      if (data.success) setStep('done');
+      else setError(data.message || 'Failed to send message');
+    } catch { setError('Network error. Please try again.'); }
+    finally { setSending(false); }
+  }
+
+  const tplList = templates.length > 0 ? templates : FALLBACK_TEMPLATES.map((t, i) => ({ id: i + 1, text: t }));
+  const canProceed = selected !== null || custom.trim().length > 0;
+
+  return (
+    <BottomSheet onClose={onClose}>
+      {step === 'pick' && (
+        <>
+          <h3 style={{ color: C.teal, fontWeight: 700, fontSize: '1.05rem', margin: '0 0 4px' }}>💬 Send a Message</h3>
+          <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: '0 0 1rem' }}>Choose a message or type your own.</p>
+          {tplList.map(t => (
+            <button key={t.id} onClick={() => { setSelected(t.id); setCustom(''); }}
+              style={{ width: '100%', textAlign: 'left', padding: '11px 14px', borderRadius: '10px', marginBottom: '8px', border: `1px solid ${selected === t.id ? C.teal : C.border}`, backgroundColor: selected === t.id ? 'rgba(0,229,160,0.08)' : 'rgba(255,255,255,0.03)', color: selected === t.id ? C.teal : C.textPrimary, cursor: 'pointer', fontSize: '0.88rem' }}>
+              {t.text}
+            </button>
+          ))}
+          <textarea placeholder="Or type a custom message (200 chars)…" value={custom} onChange={e => { setCustom(e.target.value.slice(0, 200)); setSelected(null); }}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '10px', border: `1px solid ${C.border}`, backgroundColor: 'rgba(255,255,255,0.04)', color: C.textPrimary, fontSize: '0.9rem', outline: 'none', resize: 'none', height: '80px', marginBottom: '12px' }} />
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={onClose} style={outlineBtn}>Cancel</button>
+            <button onClick={() => setStep('phone')} disabled={!canProceed} style={btnStyle(C.teal, '#0A0F2C', !canProceed)}>Next →</button>
+          </div>
+        </>
+      )}
+      {step === 'phone' && (
+        <>
+          <h3 style={{ color: C.teal, fontWeight: 700, fontSize: '1.05rem', margin: '0 0 4px' }}>💬 Your Number</h3>
+          <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: '0 0 1rem', lineHeight: 1.5 }}>Required so the owner can reply. It won't be shown directly.</p>
+          <input type="tel" inputMode="numeric" maxLength={10} autoFocus value={phone} onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setPhoneErr(''); }} placeholder="10-digit mobile number"
+            style={{ width: '100%', boxSizing: 'border-box', padding: '14px', borderRadius: '10px', border: `1px solid ${phoneErr ? C.danger : C.border}`, backgroundColor: 'rgba(255,255,255,0.05)', color: C.textPrimary, fontSize: '1rem', outline: 'none', marginBottom: '6px' }} />
+          {phoneErr && <p style={{ color: C.danger, fontSize: '0.8rem', margin: '0 0 8px' }}>{phoneErr}</p>}
+          {error    && <p style={{ color: C.danger, fontSize: '0.8rem', margin: '0 0 8px' }}>{error}</p>}
+          <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+            <button onClick={() => setStep('pick')} style={outlineBtn}>Back</button>
+            <button onClick={handleSend} disabled={sending || phone.length !== 10} style={btnStyle(C.teal, '#0A0F2C', sending || phone.length !== 10)}>
+              {sending ? 'Sending…' : 'Send Message'}
+            </button>
+          </div>
+        </>
+      )}
+      {step === 'done' && (
         <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>⏱️</div>
-          <p style={{ color: C.textPrimary, fontWeight: 700, fontSize: '1rem', margin: '0 0 8px' }}>Message window has expired</p>
-          <p style={{ color: C.textSecondary, fontSize: '0.85rem', margin: '0 0 1.5rem', lineHeight: 1.6 }}>
-            Please scan the QR again to try calling or messaging.
-          </p>
-          <button onClick={onClose} style={btnStyle(C.blue, '#fff')}>Close</button>
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>✅</div>
+          <p style={{ color: C.teal, fontWeight: 700, fontSize: '1rem', margin: '0 0 6px' }}>Message sent!</p>
+          <p style={{ color: C.textSecondary, fontSize: '0.85rem', margin: '0 0 1.5rem' }}>The owner has been notified.</p>
+          <button onClick={onClose} style={btnStyle(C.teal, '#0A0F2C')}>Done</button>
         </div>
       )}
-
+      {step === 'blocked' && (
+        <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🚫</div>
+          <p style={{ color: C.textSecondary, fontWeight: 700, fontSize: '1rem', margin: '0 0 8px' }}>Unable to contact this vehicle at this time.</p>
+          <button onClick={onClose} style={{ ...btnStyle('rgba(148,163,184,0.2)', C.textSecondary), marginTop: '1rem' }}>Close</button>
+        </div>
+      )}
     </BottomSheet>
   );
 }
 
 // ── Emergency Panel ───────────────────────────────────────────────────────────
-const EMERGENCY_TYPES = [
-  'Accident',
-  'Vehicle being towed',
-  'Break-in attempt',
-  'Medical emergency near vehicle',
-  'Other',
-];
-
+const EMERGENCY_TYPES = ['Accident or injury', 'Vehicle on fire', 'Hit and run', 'Medical emergency', 'Other emergency'];
 const STAGE_LABELS = {
   calling_owner:     'Calling vehicle owner…',
-  calling_contact_1: "Owner didn't answer. Calling emergency contact 1…",
-  calling_contact_2: "Contact 1 didn't answer. Calling emergency contact 2…",
-  calling_contact_3: "Contact 2 didn't answer. Calling emergency contact 3…",
-  connected:         'Connected!',
-  all_failed:        'Could not reach anyone.',
+  calling_contact_1: 'Calling emergency contact 1…',
+  calling_contact_2: 'Calling emergency contact 2…',
+  calling_contact_3: 'Calling emergency contact 3…',
 };
 
-function EmergencyPanel({ vehicleId, sig, onClose }) {
-  // step: 'type' | 'phone' | 'chain'
-  const [step, setStep]           = useState('type');
+function EmergencyPanel({ vehicleId, sig, hasEmergencyContacts, onClose }) {
+  const [step, setStep]         = useState('type');
   const [emergType, setEmergType] = useState(null);
-  const [phone, setPhone]         = useState('');
-  const [phoneErr, setPhoneErr]   = useState('');
+  const [phone, setPhone]       = useState('');
+  const [phoneErr, setPhoneErr] = useState('');
   const [submitErr, setSubmitErr] = useState('');
-  const [sessionId, setSessionId] = useState(null);
-  const [stage, setStage]         = useState('calling_owner');
+  const [stage, setStage]       = useState('calling_owner');
   const [connectedTo, setConnectedTo] = useState(null);
-  const pollRef  = useRef(null);
-  const pollCount = useRef(0);
+  const pollRef = useRef(null);
 
   useEffect(() => () => clearInterval(pollRef.current), []);
 
   function startPolling(sid) {
-    pollCount.current = 0;
     pollRef.current = setInterval(async () => {
-      pollCount.current += 1;
-      if (pollCount.current > 40) { clearInterval(pollRef.current); return; } // 120s max
       try {
         const r = await fetch(`${API_BASE}/v/${vehicleId}/emergency-status/${sid}`);
         const data = await r.json();
-        if (!data.success) return;
-        setStage(data.stage);
-        if (data.connected_to) setConnectedTo(data.connected_to);
-        if (data.stage === 'connected' || data.stage === 'all_failed') {
-          clearInterval(pollRef.current);
+        if (data.success) {
+          setStage(data.stage);
+          setConnectedTo(data.connected_to);
+          if (['connected', 'all_failed'].includes(data.stage)) clearInterval(pollRef.current);
         }
-      } catch { /* network blip */ }
+      } catch {}
     }, 3000);
   }
 
@@ -382,13 +345,11 @@ function EmergencyPanel({ vehicleId, sig, onClose }) {
     setPhoneErr(''); setSubmitErr('');
     try {
       const r = await fetch(`${API_BASE}/v/${vehicleId}/emergency`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sig, caller_phone: phone, description: emergType }),
       });
       const data = await r.json();
       if (data.success && data.emergency_session_id) {
-        setSessionId(data.emergency_session_id);
         setStep('chain');
         startPolling(data.emergency_session_id);
       } else {
@@ -401,59 +362,40 @@ function EmergencyPanel({ vehicleId, sig, onClose }) {
 
   return (
     <BottomSheet onClose={canClose ? onClose : undefined}>
-
-      {/* Step: Choose type */}
       {step === 'type' && (
         <>
           <h3 style={{ color: '#EF4444', fontWeight: 700, fontSize: '1rem', margin: '0 0 4px' }}>🚨 Emergency</h3>
           <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: '0 0 1rem' }}>What's happening?</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '1rem' }}>
             {EMERGENCY_TYPES.map(t => (
-              <button
-                key={t}
-                onClick={() => setEmergType(emergType === t ? null : t)}
-                style={{ padding: '12px 14px', borderRadius: '10px', textAlign: 'left', border: `1px solid ${emergType === t ? '#EF4444' : C.border}`, backgroundColor: emergType === t ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)', color: emergType === t ? '#EF4444' : C.textPrimary, fontWeight: 500, fontSize: '0.9rem', cursor: 'pointer' }}
-              >
+              <button key={t} onClick={() => setEmergType(emergType === t ? null : t)}
+                style={{ padding: '12px 14px', borderRadius: '10px', textAlign: 'left', border: `1px solid ${emergType === t ? '#EF4444' : C.border}`, backgroundColor: emergType === t ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.04)', color: emergType === t ? '#EF4444' : C.textPrimary, fontWeight: 500, fontSize: '0.9rem', cursor: 'pointer' }}>
                 {t}
               </button>
             ))}
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button onClick={onClose} style={outlineBtn}>Cancel</button>
-            <button onClick={() => setStep('phone')} disabled={!emergType} style={btnStyle('#EF4444', '#fff', !emergType)}>
-              Next →
-            </button>
+            <button onClick={() => setStep('phone')} disabled={!emergType} style={btnStyle('#EF4444', '#fff', !emergType)}>Next →</button>
           </div>
         </>
       )}
-
-      {/* Step: Phone entry */}
       {step === 'phone' && (
         <>
           <h3 style={{ color: '#EF4444', fontWeight: 700, fontSize: '1rem', margin: '0 0 4px' }}>🚨 {emergType}</h3>
           <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: '0 0 1rem', lineHeight: 1.5 }}>
-            Your number is needed to connect the call to the vehicle owner and emergency contacts.
+            Your number is needed to connect you to the vehicle owner{hasEmergencyContacts ? ' and emergency contacts' : ''}.
           </p>
-          <input
-            type="tel" inputMode="numeric" maxLength={10}
-            value={phone}
-            onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setPhoneErr(''); }}
-            placeholder="10-digit mobile number"
-            autoFocus
-            style={{ width: '100%', boxSizing: 'border-box', padding: '14px', borderRadius: '10px', border: `1px solid ${phoneErr ? '#EF4444' : C.border}`, backgroundColor: 'rgba(255,255,255,0.05)', color: C.textPrimary, fontSize: '1rem', outline: 'none', marginBottom: '6px' }}
-          />
+          <input type="tel" inputMode="numeric" maxLength={10} value={phone} onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setPhoneErr(''); }} placeholder="10-digit mobile number" autoFocus
+            style={{ width: '100%', boxSizing: 'border-box', padding: '14px', borderRadius: '10px', border: `1px solid ${phoneErr ? '#EF4444' : C.border}`, backgroundColor: 'rgba(255,255,255,0.05)', color: C.textPrimary, fontSize: '1rem', outline: 'none', marginBottom: '6px' }} />
           {phoneErr  && <p style={{ color: '#EF4444', fontSize: '0.8rem', margin: '0 0 8px' }}>{phoneErr}</p>}
           {submitErr && <p style={{ color: '#EF4444', fontSize: '0.8rem', margin: '0 0 8px' }}>{submitErr}</p>}
           <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
             <button onClick={() => setStep('type')} style={outlineBtn}>Back</button>
-            <button onClick={handleSubmit} disabled={phone.length !== 10} style={btnStyle('#EF4444', '#fff', phone.length !== 10)}>
-              🚨 Call Now
-            </button>
+            <button onClick={handleSubmit} disabled={phone.length !== 10} style={btnStyle('#EF4444', '#fff', phone.length !== 10)}>🚨 Call Now</button>
           </div>
         </>
       )}
-
-      {/* Step: Chain status */}
       {step === 'chain' && (
         <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
           {stage === 'connected' ? (
@@ -485,149 +427,98 @@ function EmergencyPanel({ vehicleId, sig, onClose }) {
           )}
         </div>
       )}
-
     </BottomSheet>
   );
 }
 
-// ── Messaging Panel ───────────────────────────────────────────────────────────
-function MessagePanel({ vehicleId, sig, templates, onClose }) {
-  const [step, setStep]         = useState('pick'); // 'pick' | 'phone' | 'done'
-  const [selected, setSelected] = useState(null);
-  const [custom, setCustom]     = useState('');
-  const [phone, setPhone]       = useState('');
-  const [phoneErr, setPhoneErr] = useState('');
-  const [sending, setSending]   = useState(false);
-  const [error, setError]       = useState('');
+// ── Report Panel ──────────────────────────────────────────────────────────────
+const REPORT_REASONS = [
+  { value: 'fake_qr',             label: 'QR seems fake or tampered' },
+  { value: 'vehicle_mismatch',    label: "Vehicle doesn't match this plate number" },
+  { value: 'suspicious_activity', label: 'Suspicious activity around this vehicle' },
+  { value: 'other',               label: 'Other issue' },
+];
 
-  function handleSend() {
+function ReportPanel({ vehicleId, onClose }) {
+  const [reason, setReason]         = useState(null);
+  const [description, setDescription] = useState('');
+  const [phone, setPhone]           = useState('');
+  const [phoneErr, setPhoneErr]     = useState('');
+  const [loading, setLoading]       = useState(false);
+  const [done, setDone]             = useState(false);
+  const [error, setError]           = useState('');
+
+  async function handleSubmit() {
     if (!PHONE_RE.test(phone)) { setPhoneErr('Enter a valid 10-digit Indian number'); return; }
-    setPhoneErr('');
-    setSending(true);
-
-    fetch(`${API_BASE}/v/${vehicleId}/message`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sig,
-        sender_phone: phone,
-        template_id: selected || undefined,
-        custom_text: custom.trim() || undefined,
-      }),
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success) setStep('done');
-        else setError(data.message || 'Failed to send message');
-      })
-      .catch(() => setError('Network error. Please try again.'))
-      .finally(() => setSending(false));
+    setPhoneErr(''); setLoading(true); setError('');
+    try {
+      const r = await fetch(`${API_BASE}/v/${vehicleId}/report`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason, description: description.trim() || undefined, reporter_phone: phone }),
+      });
+      const data = await r.json();
+      if (r.status === 429) { setError(data.message || 'You have already reported this vehicle recently.'); return; }
+      if (data.success) setDone(true);
+      else setError(data.message || 'Failed to submit report');
+    } catch { setError('Network error. Please try again.'); }
+    finally { setLoading(false); }
   }
-
-  const canProceed = selected !== null || custom.trim().length > 0;
 
   return (
     <BottomSheet onClose={onClose}>
-      {step === 'done' ? (
+      {done ? (
         <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>✓</div>
-          <p style={{ color: C.teal, fontWeight: 700, fontSize: '1.1rem', margin: '0 0 6px' }}>Message sent!</p>
-          <p style={{ color: C.textSecondary, fontSize: '0.88rem', margin: '0 0 1.5rem' }}>
-            The vehicle owner has been notified.
-          </p>
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>✅</div>
+          <p style={{ color: C.teal, fontWeight: 700, fontSize: '1rem', margin: '0 0 8px' }}>Report submitted</p>
+          <p style={{ color: C.textSecondary, fontSize: '0.85rem', margin: '0 0 1.5rem', lineHeight: 1.6 }}>Thank you for helping keep Sampaark safe.</p>
           <button onClick={onClose} style={btnStyle(C.teal, '#0A0F2C')}>Done</button>
         </div>
-      ) : step === 'phone' ? (
-        <>
-          <h3 style={{ color: C.textPrimary, fontWeight: 700, fontSize: '1rem', margin: '0 0 6px' }}>Your phone number</h3>
-          <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: '0 0 1rem' }}>
-            So the owner can call you back if needed. Not stored publicly.
-          </p>
-          <input
-            type="tel"
-            inputMode="numeric"
-            maxLength={10}
-            value={phone}
-            onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setPhoneErr(''); }}
-            placeholder="10-digit mobile number"
-            style={{
-              width: '100%', boxSizing: 'border-box',
-              padding: '14px', borderRadius: '10px',
-              border: `1px solid ${phoneErr ? C.danger : C.border}`,
-              backgroundColor: 'rgba(255,255,255,0.05)',
-              color: C.textPrimary, fontSize: '1rem',
-              outline: 'none', marginBottom: '6px',
-            }}
-          />
-          {phoneErr && <p style={{ color: C.danger, fontSize: '0.8rem', margin: '0 0 10px' }}>{phoneErr}</p>}
-          {error && <p style={{ color: C.danger, fontSize: '0.8rem', margin: '0 0 10px' }}>{error}</p>}
-          <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-            <button onClick={() => setStep('pick')} style={outlineBtn}>Back</button>
-            <button onClick={handleSend} disabled={sending} style={btnStyle(C.teal, '#0A0F2C', sending)}>
-              {sending ? 'Sending…' : 'Send Message'}
-            </button>
-          </div>
-        </>
       ) : (
         <>
-          <h3 style={{ color: C.textPrimary, fontWeight: 700, fontSize: '1rem', margin: '0 0 1rem' }}>Choose a message</h3>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '1rem' }}>
-            {templates.map(t => (
-              <button
-                key={t.id}
-                onClick={() => setSelected(selected === t.id ? null : t.id)}
-                style={{
-                  padding: '12px 14px', borderRadius: '10px', textAlign: 'left',
-                  border: `1px solid ${selected === t.id ? C.teal : C.border}`,
-                  backgroundColor: selected === t.id ? 'rgba(0,229,160,0.1)' : 'rgba(255,255,255,0.04)',
-                  color: selected === t.id ? C.teal : C.textPrimary,
-                  fontWeight: 500, fontSize: '0.9rem', cursor: 'pointer',
-                  transition: 'all 0.15s',
-                }}
-              >
-                {t.text}
+          <h3 style={{ color: C.textPrimary, fontWeight: 700, fontSize: '1rem', margin: '0 0 4px' }}>🚩 Report an Issue</h3>
+          <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: '0 0 1rem' }}>What's wrong with this QR?</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+            {REPORT_REASONS.map(r => (
+              <button key={r.value} onClick={() => setReason(r.value)}
+                style={{ padding: '11px 14px', borderRadius: '10px', textAlign: 'left', border: `1px solid ${reason === r.value ? C.amber : C.border}`, backgroundColor: reason === r.value ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.03)', color: reason === r.value ? C.amber : C.textPrimary, fontSize: '0.88rem', cursor: 'pointer' }}>
+                {r.label}
               </button>
             ))}
           </div>
-
-          <div style={{ marginBottom: '1rem' }}>
-            <p style={{ color: C.textSecondary, fontSize: '0.8rem', margin: '0 0 6px' }}>Or write a custom message</p>
-            <textarea
-              rows={3}
-              maxLength={200}
-              value={custom}
-              onChange={e => { setCustom(e.target.value); if (e.target.value) setSelected(null); }}
-              placeholder="Type your message…"
-              style={{
-                width: '100%', boxSizing: 'border-box',
-                padding: '12px', borderRadius: '10px',
-                border: `1px solid ${C.border}`,
-                backgroundColor: 'rgba(255,255,255,0.05)',
-                color: C.textPrimary, fontSize: '0.9rem',
-                resize: 'none', outline: 'none',
-              }}
-            />
-            <p style={{ color: C.textSecondary, fontSize: '0.75rem', textAlign: 'right', margin: '2px 0 0' }}>
-              {custom.length}/200
-            </p>
+          {reason && (
+            <textarea placeholder="Additional details (optional, 500 chars max)" value={description} onChange={e => setDescription(e.target.value.slice(0, 500))}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '10px', border: `1px solid ${C.border}`, backgroundColor: 'rgba(255,255,255,0.04)', color: C.textPrimary, fontSize: '0.88rem', outline: 'none', resize: 'none', height: '80px', marginBottom: '10px' }} />
+          )}
+          <input type="tel" inputMode="numeric" maxLength={10} value={phone} onChange={e => { setPhone(e.target.value.replace(/\D/g, '')); setPhoneErr(''); }} placeholder="Your phone number (required)"
+            style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '10px', border: `1px solid ${phoneErr ? C.danger : C.border}`, backgroundColor: 'rgba(255,255,255,0.05)', color: C.textPrimary, fontSize: '0.9rem', outline: 'none', marginBottom: '6px' }} />
+          {phoneErr && <p style={{ color: C.danger, fontSize: '0.8rem', margin: '0 0 8px' }}>{phoneErr}</p>}
+          {error    && <p style={{ color: C.danger, fontSize: '0.8rem', margin: '0 0 8px' }}>{error}</p>}
+          <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+            <button onClick={onClose} style={outlineBtn}>Cancel</button>
+            <button onClick={handleSubmit} disabled={!reason || phone.length !== 10 || loading} style={btnStyle(C.amber, '#0A0F2C', !reason || phone.length !== 10 || loading)}>
+              {loading ? 'Submitting…' : 'Submit Report'}
+            </button>
           </div>
-
-          <button
-            onClick={() => setStep('phone')}
-            disabled={!canProceed}
-            style={btnStyle(C.teal, '#0A0F2C', !canProceed)}
-          >
-            Next →
-          </button>
         </>
       )}
     </BottomSheet>
   );
 }
 
-// ── Action Button ─────────────────────────────────────────────────────────────
-function ActionBtn({ icon, label, sublabel, color, onClick, disabled }) {
+// ── Powered by footer ─────────────────────────────────────────────────────────
+function SampaarkFooter() {
+  return (
+    <div style={{ textAlign: 'center', padding: '1.5rem 0 1rem' }}>
+      <a href="/" target="_blank" rel="noreferrer" style={{ color: C.teal, fontWeight: 700, fontSize: '0.85rem', textDecoration: 'none', display: 'block' }}>
+        Powered by Sampaark
+      </a>
+      <p style={{ color: '#4B5563', fontSize: '0.72rem', margin: '4px 0 0' }}>Protect your number. Get your QR.</p>
+    </div>
+  );
+}
+
+// ── Action button ─────────────────────────────────────────────────────────────
+function ActionButton({ icon, label, sublabel, color, disabled, onClick }) {
   return (
     <button
       onClick={disabled ? undefined : onClick}
@@ -657,177 +548,230 @@ export default function PublicScan() {
   const [searchParams] = useSearchParams();
   const sig = searchParams.get('sig');
 
-  const [state, setState]          = useState('loading'); // 'loading' | 'ok' | 'error'
-  const [vehicle, setVehicle]      = useState(null);
-  const [templates, setTemplates]  = useState([]);
-  const [showMsg, setShowMsg]      = useState(false);
-  const [showCall, setShowCall]    = useState(false);
-  const [showEmergency, setShowEmergency] = useState(false);
-  const [errMsg, setErrMsg]        = useState('');
+  const [state, setState]    = useState('loading');
+  const [vehicle, setVehicle]  = useState(null);
+  const [info, setInfo]        = useState(null);
+  const [templates, setTemplates] = useState([]);
+  const [panel, setPanel]      = useState(null);
+  const [errMsg, setErrMsg]    = useState('');
+
+  useEffect(() => {
+    if (vehicle?.plate_number) document.title = `Sampaark — Contact ${vehicle.plate_number}`;
+    else document.title = 'Sampaark — Contact Vehicle Owner';
+    return () => { document.title = 'Sampaark'; };
+  }, [vehicle]);
 
   useEffect(() => {
     if (!sig) { setState('error'); setErrMsg('Invalid QR code — missing signature.'); return; }
+    const base = `${API_BASE}/v/${vehicleId}`;
+    const sp   = encodeURIComponent(sig);
 
-    fetch(`${API_BASE}/v/${vehicleId}?sig=${encodeURIComponent(sig)}`)
+    fetch(`${base}?sig=${sp}`)
       .then(r => r.json())
       .then(data => {
         if (!data.success) throw new Error(data.message || 'Invalid QR');
         setVehicle(data.vehicle);
-        if (data.expired) {
-          setState('expired');
-          return;
-        }
+        if (data.deactivated)  { setState('deactivated');  return null; }
+        if (data.transferring) { setState('transferring'); return null; }
+        if (data.suspended)    { setState('suspended');    return null; }
+        if (data.expired)      { setState('expired');      return null; }
         setState('ok');
-        return fetch(`${API_BASE}/v/${vehicleId}/templates?sig=${encodeURIComponent(sig)}`);
+        return Promise.all([
+          fetch(`${base}/info?sig=${sp}`).then(r => r.json()).catch(() => null),
+          fetch(`${base}/templates?sig=${sp}`).then(r => r.json()).catch(() => null),
+        ]);
       })
-      .then(r => r?.json())
-      .then(data => { if (data?.success) setTemplates(data.templates); })
+      .then(results => {
+        if (!results) return;
+        const [infoData, tplData] = results;
+        if (infoData?.success) setInfo(infoData.info);
+        if (tplData?.success)  setTemplates(tplData.templates || []);
+      })
       .catch(err => { setState('error'); setErrMsg(err.message || 'Invalid or expired QR code.'); });
   }, [vehicleId, sig]);
 
+  // ── Loading skeleton ──────────────────────────────────────────────────────
   if (state === 'loading') {
     return (
-      <div style={pageStyle}>
-        <p style={{ color: C.textSecondary, fontSize: '0.9rem' }}>Verifying QR code…</p>
-      </div>
-    );
-  }
-
-  if (state === 'error') {
-    return (
-      <div style={pageStyle}>
-        <div style={{ textAlign: 'center', maxWidth: '320px' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '12px' }}>⚠️</div>
-          <h2 style={{ color: C.textPrimary, fontWeight: 700, margin: '0 0 8px' }}>Invalid QR Code</h2>
-          <p style={{ color: C.textSecondary, fontSize: '0.9rem', margin: 0 }}>{errMsg}</p>
+      <div style={{ minHeight: '100vh', backgroundColor: C.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2.5rem 1.25rem 2rem' }}>
+        <style>{`@keyframes skeletonPulse { 0%,100%{opacity:.5} 50%{opacity:1} }`}</style>
+        <div style={{ width: '100%', maxWidth: '420px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+            <Skeleton width="55%" height="12px" radius="4px" s={{ margin: '0 auto 20px' }} />
+            <Skeleton width="210px" height="56px" radius="14px" s={{ margin: '0 auto 10px' }} />
+            <Skeleton width="90px" height="16px" radius="4px" s={{ margin: '0 auto' }} />
+          </div>
+          <Skeleton width="100%" height="16px" radius="4px" s={{ marginBottom: '8px' }} />
+          <Skeleton width="70%" height="16px" radius="4px" s={{ marginBottom: '24px' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <Skeleton width="100%" height="64px" radius="14px" />
+            <Skeleton width="100%" height="64px" radius="14px" />
+            <Skeleton width="100%" height="64px" radius="14px" />
+          </div>
         </div>
       </div>
     );
   }
 
-  if (state === 'expired') {
+  // ── Error / special states ────────────────────────────────────────────────
+  const STATE_CONFIG = {
+    error:       { icon: '⚠️',  bg: C.bg,       title: 'Invalid QR Code',        body: errMsg || 'This QR code is invalid or has been tampered with.',                              showReport: true,  showLearn: true  },
+    expired:     { icon: '⏱️',  bg: C.bg,       title: 'QR Code Expired',        body: "This vehicle's Sampark subscription has expired. The owner needs to renew.",               showReport: true,  showLearn: true  },
+    suspended:   { icon: '🛡️', bg: '#0D0D0D',  title: 'Service Unavailable',    body: "This vehicle's Sampark service has been temporarily suspended.",                           showReport: true,  showLearn: false },
+    deactivated: { icon: '🚗',  bg: '#0D0D0D',  title: 'Vehicle Not Registered', body: 'This vehicle is no longer registered on Sampaark.',                                        showReport: false, showLearn: true  },
+    transferring:{ icon: '🔄',  bg: '#0A0A1A',  title: 'Transfer in Progress',   body: 'This vehicle is being transferred to a new owner. Service will resume once complete.',     showReport: false, showLearn: false },
+  };
+
+  if (STATE_CONFIG[state]) {
+    const cfg = STATE_CONFIG[state];
     return (
-      <div style={pageStyle}>
-        <div style={{ textAlign: 'center', maxWidth: '320px', padding: '0 1rem' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '12px' }}>⏱️</div>
-          <h2 style={{ color: C.textPrimary, fontWeight: 700, margin: '0 0 8px' }}>QR Expired</h2>
+      <div style={{ minHeight: '100vh', backgroundColor: cfg.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
+        <div style={{ textAlign: 'center', maxWidth: '320px', width: '100%' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '14px', opacity: 0.65 }}>{cfg.icon}</div>
+          <h2 style={{ color: C.textPrimary, fontWeight: 700, fontSize: '1.3rem', margin: '0 0 10px' }}>{cfg.title}</h2>
           {vehicle?.plate_number && (
-            <span style={{ fontFamily: C.mono, display: 'block', fontSize: '1.2rem', fontWeight: 700, color: C.textPrimary, marginBottom: '10px' }}>
+            <span style={{ fontFamily: C.mono, display: 'block', fontSize: '1.1rem', fontWeight: 700, color: C.textSecondary, marginBottom: '10px' }}>
               {vehicle.plate_number}
             </span>
           )}
-          <p style={{ color: C.textSecondary, fontSize: '0.9rem', margin: 0 }}>
-            This Sampark QR has expired. The vehicle owner needs to renew their subscription.
-          </p>
+          <p style={{ color: C.textSecondary, fontSize: '0.88rem', margin: '0 0 20px', lineHeight: 1.65 }}>{cfg.body}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {cfg.showReport && (
+              <button onClick={() => setPanel('report')} style={{ padding: '12px', borderRadius: '10px', border: `1px solid ${C.border}`, background: 'transparent', color: C.textSecondary, fontSize: '0.88rem', cursor: 'pointer' }}>
+                🚩 Report an Issue
+              </button>
+            )}
+            {cfg.showLearn && (
+              <a href="/" target="_blank" rel="noreferrer" style={{ display: 'block', padding: '12px', borderRadius: '10px', border: 'rgba(0,229,160,0.2) 1px solid', color: C.teal, fontSize: '0.88rem', textDecoration: 'none', fontWeight: 600 }}>
+                Learn about Sampaark →
+              </a>
+            )}
+          </div>
         </div>
+        <SampaarkFooter />
+        {panel === 'report' && <ReportPanel vehicleId={vehicleId} onClose={() => setPanel(null)} />}
       </div>
     );
   }
 
-  const isSilent      = vehicle.comm_mode === 'silent';
-  const isMessageOnly = vehicle.comm_mode === 'message_only';
+  // ── Main scan UI ──────────────────────────────────────────────────────────
+  const isSilent      = vehicle?.comm_mode === 'silent';
+  const isMessageOnly = vehicle?.comm_mode === 'message_only';
+  const responseRate  = info?.owner_response_rate;
+  const showTrust     = typeof responseRate === 'number' && responseRate >= 50;
+  const trustColor    = responseRate >= 80 ? C.teal : C.amber;
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: C.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 1rem 2rem' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: C.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 1rem 1rem' }}>
 
-      {/* Header */}
-      <div style={{ width: '100%', maxWidth: '480px', paddingTop: '2.5rem', marginBottom: '2rem', textAlign: 'center' }}>
-        <p style={{ color: C.teal, fontWeight: 700, fontSize: '0.82rem', letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 0 10px' }}>
+      <div style={{ width: '100%', maxWidth: '420px', paddingTop: '2.5rem' }}>
+
+        {/* Sampaark label */}
+        <p style={{ color: C.teal, fontWeight: 700, fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 0 16px', textAlign: 'center' }}>
           Sampaark — Secure Contact
         </p>
-        <div style={{
-          display: 'inline-block',
-          padding: '10px 24px',
-          borderRadius: '12px',
-          border: `2px solid ${C.teal}30`,
-          backgroundColor: `${C.teal}0A`,
-          marginBottom: '16px',
-        }}>
-          <span style={{ fontFamily: C.mono, fontSize: '2rem', fontWeight: 700, color: C.textPrimary, letterSpacing: '0.08em' }}>
-            {vehicle.plate_number}
-          </span>
-        </div>
-        <p style={{
-          color: C.textSecondary, fontSize: '0.82rem', lineHeight: 1.6,
-          margin: 0,
-          border: `1px solid ${C.border}`,
-          borderRadius: '8px', padding: '10px 14px',
-          backgroundColor: 'rgba(255,255,255,0.03)',
-        }}>
-          🔒 This is a secure, masked communication channel. Your personal information will not be shared with the vehicle owner.
-        </p>
-      </div>
 
-      {/* Action Buttons */}
-      <div style={{ width: '100%', maxWidth: '480px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {!isSilent && !isMessageOnly && (
-          <ActionBtn
-            icon="📞"
-            label="Call"
-            sublabel="Your number stays private"
-            color={C.blue}
-            onClick={() => setShowCall(true)}
-            disabled={false}
-          />
+        {/* Plate number + verification badge */}
+        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', padding: '12px 28px', borderRadius: '14px', border: '2px solid rgba(0,229,160,0.18)', backgroundColor: 'rgba(0,229,160,0.06)', marginBottom: '10px' }}>
+            <span style={{ fontFamily: C.mono, fontSize: '2rem', fontWeight: 700, color: C.textPrimary, letterSpacing: '0.08em' }}>
+              {vehicle.plate_number}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginBottom: '8px' }}>
+            {info?.is_digilocker_verified ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600, color: '#67B7FF', backgroundColor: 'rgba(103,183,255,0.1)', border: '1px solid rgba(103,183,255,0.3)', borderRadius: '999px', padding: '3px 10px' }}>
+                🛡️ DigiLocker Verified
+              </span>
+            ) : info?.verification_method ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600, color: C.teal, backgroundColor: 'rgba(0,229,160,0.08)', border: '1px solid rgba(0,229,160,0.2)', borderRadius: '999px', padding: '3px 10px' }}>
+                ✓ Verified
+              </span>
+            ) : null}
+          </div>
+          {info?.card_code && (
+            <p style={{ color: C.textSecondary, fontSize: '0.72rem', margin: 0, letterSpacing: '0.06em' }}>
+              Code: <span style={{ fontFamily: C.mono, color: C.textPrimary }}>{info.card_code}</span>
+            </p>
+          )}
+        </div>
+
+        {/* Trust section (5+ calls, rate ≥ 50%) */}
+        {showTrust && (
+          <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, borderRadius: '12px', padding: '12px 16px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.78rem', color: C.textSecondary }}>Owner response rate</span>
+              <span style={{ fontWeight: 700, fontSize: '0.88rem', color: trustColor }}>{responseRate}%</span>
+            </div>
+            <div style={{ height: '4px', borderRadius: '2px', backgroundColor: 'rgba(255,255,255,0.08)' }}>
+              <div style={{ height: '100%', borderRadius: '2px', backgroundColor: trustColor, width: `${responseRate}%` }} />
+            </div>
+            {info?.average_response_time > 0 && (
+              <p style={{ fontSize: '0.72rem', color: C.textSecondary, margin: '6px 0 0' }}>
+                Avg response time: ~{info.average_response_time}s
+              </p>
+            )}
+          </div>
         )}
 
-        <ActionBtn
-          icon="💬"
-          label="Message"
-          sublabel="Send a quick note to the owner"
-          color={C.teal}
-          onClick={() => setShowMsg(true)}
-          disabled={isSilent}
-        />
+        {/* Privacy notice */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${C.border}`, backgroundColor: 'rgba(255,255,255,0.02)', marginBottom: '20px' }}>
+          <span style={{ fontSize: '0.85rem', flexShrink: 0, marginTop: '1px' }}>🔒</span>
+          <p style={{ color: C.textSecondary, fontSize: '0.78rem', margin: 0, lineHeight: 1.5 }}>
+            Secure masked communication — your identity stays private
+          </p>
+        </div>
 
-        <ActionBtn
-          icon="🚨"
-          label="Emergency"
-          sublabel="Calls owner + emergency contacts"
-          color={C.danger}
-          onClick={() => setShowEmergency(true)}
-          disabled={false}
-        />
+        {/* Action buttons */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
+          {!isSilent && !isMessageOnly && (
+            <ActionButton
+              icon="📞" color={C.blue}
+              label="Call Vehicle Owner"
+              sublabel="Masked call — your number is protected"
+              onClick={() => { buzz(50); setPanel('call'); }}
+            />
+          )}
+          {!isSilent && (
+            <ActionButton
+              icon="💬" color={C.teal}
+              label="Send a Message"
+              sublabel="Owner gets notified instantly"
+              onClick={() => { buzz(50); setPanel('message'); }}
+            />
+          )}
+          <ActionButton
+            icon="🚨" color={C.danger}
+            label="Emergency Contact"
+            sublabel={info?.has_emergency_contacts ? 'Calls owner + emergency contacts' : 'Calls vehicle owner directly'}
+            onClick={() => { buzz([50, 30, 50]); setPanel('emergency'); }}
+          />
+          {isSilent && (
+            <p style={{ textAlign: 'center', fontSize: '0.78rem', color: C.textSecondary, margin: '2px 0 0' }}>
+              This vehicle is in silent mode — only emergency contact is available.
+            </p>
+          )}
+        </div>
+
+        {/* Bottom section */}
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {info?.card_code && (
+            <p style={{ color: C.textSecondary, fontSize: '0.78rem', margin: 0, lineHeight: 1.6 }}>
+              Can't scan? Text <span style={{ fontFamily: C.mono, color: C.textPrimary, fontWeight: 600 }}>{info.card_code}</span> to reach the owner
+            </p>
+          )}
+          <button onClick={() => setPanel('report')} style={{ border: 'none', background: 'none', color: C.textSecondary, fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline', padding: '4px 0' }}>
+            Report an issue
+          </button>
+        </div>
       </div>
 
-      {isSilent && (
-        <p style={{ color: C.textSecondary, fontSize: '0.8rem', marginTop: '1.5rem', textAlign: 'center' }}>
-          This vehicle owner has enabled silent mode. Only emergency contact is available.
-        </p>
-      )}
+      <SampaarkFooter />
 
-      {showCall && (
-        <CallPanel
-          vehicleId={vehicleId}
-          sig={sig}
-          onClose={() => setShowCall(false)}
-        />
-      )}
-
-      {showMsg && (
-        <MessagePanel
-          vehicleId={vehicleId}
-          sig={sig}
-          templates={templates}
-          onClose={() => setShowMsg(false)}
-        />
-      )}
-
-      {showEmergency && (
-        <EmergencyPanel
-          vehicleId={vehicleId}
-          sig={sig}
-          onClose={() => setShowEmergency(false)}
-        />
-      )}
+      {panel === 'call'      && <CallPanel      vehicleId={vehicleId} sig={sig} onClose={() => setPanel(null)} />}
+      {panel === 'message'   && <MessagePanel   vehicleId={vehicleId} sig={sig} templates={templates} onClose={() => setPanel(null)} />}
+      {panel === 'emergency' && <EmergencyPanel vehicleId={vehicleId} sig={sig} hasEmergencyContacts={info?.has_emergency_contacts} onClose={() => setPanel(null)} />}
+      {panel === 'report'    && <ReportPanel    vehicleId={vehicleId} onClose={() => setPanel(null)} />}
     </div>
   );
 }
-
-const pageStyle = {
-  minHeight: '100vh',
-  backgroundColor: C.bg,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-};

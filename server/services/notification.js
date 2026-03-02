@@ -19,9 +19,14 @@ const PREF_MAP = {
   order_delivered:          'order_updates',
   vehicle_verified:         null,
   vehicle_rejected:         null,
+  vehicle_suspended:        null,
   verification_update:      null,
+  transfer_initiated:       null,
+  vehicle_transferred_out:  null,
+  vehicle_transferred_in:   null,
   abuse_report_filed:       null,
   abuse_report_resolved:    null,
+  auto_suspension:          null,
 };
 
 /**

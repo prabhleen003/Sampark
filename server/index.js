@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.js';
 import digilockerAuthRoutes from './routes/digilockerAuth.js';
 import userRoutes from './routes/users.js';
 import vehicleRoutes from './routes/vehicles.js';
+import vehicleTransferRoutes from './routes/vehicleTransfer.js';
 import adminRoutes from './routes/admin.js';
 import publicRoutes from './routes/public.js';
 import callLogRoutes from './routes/callLogs.js';
@@ -49,6 +50,7 @@ app.use('/api/v1/auth/digilocker', digilockerAuthRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/users', authMiddleware, settingsRoutes);
 app.use('/api/v1/vehicles', vehicleRoutes);
+app.use('/api/v1/vehicles', vehicleTransferRoutes);
 app.use('/api/v1/admin', authMiddleware, adminMiddleware, adminRoutes);
 app.use('/api/v1/v', publicRoutes);                        // public — no auth
 app.use('/api/v1/call-logs', authMiddleware, callLogRoutes);

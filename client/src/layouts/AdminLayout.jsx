@@ -3,16 +3,18 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
 const S = {
-  navy:  '#0A0F2C',
-  slate: '#1E293B',
-  teal:  '#00E5A0',
-  text:  '#F1F5F9',
-  muted: '#94A3B8',
-  border:'rgba(148,163,184,0.12)',
+  navy:   '#0A0F2C',
+  slate:  '#1E293B',
+  teal:   '#00E5A0',
+  text:   '#F1F5F9',
+  muted:  '#94A3B8',
+  border: 'rgba(148,163,184,0.12)',
+  danger: '#FF3B5C',
 };
 
 export default function AdminLayout() {
-  const [admin, setAdmin] = useState(null);
+  const [admin, setAdmin]                     = useState(null);
+  const [suspendedCount, setSuspendedCount]   = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -22,6 +24,18 @@ export default function AdminLayout() {
       setAdmin(u);
     }).catch(() => { localStorage.removeItem('token'); navigate('/login'); });
   }, [navigate]);
+
+  // Poll for auto-suspended vehicles to show alert banner
+  useEffect(() => {
+    function check() {
+      api.get('/admin/suspended-vehicles').then(r => {
+        setSuspendedCount(r.data.vehicles?.length || 0);
+      }).catch(() => {});
+    }
+    check();
+    const interval = setInterval(check, 60000); // re-check every minute
+    return () => clearInterval(interval);
+  }, []);
 
   if (!admin) {
     return (
@@ -34,6 +48,8 @@ export default function AdminLayout() {
   const navItems = [
     { to: '/admin/verifications', label: 'Flagged Reviews', icon: '🔍' },
     { to: '/admin/orders',        label: 'Orders',          icon: '📦' },
+    { to: '/admin/abuse-reports', label: 'Abuse Reports',   icon: '🚨' },
+    { to: '/admin/blocklist',     label: 'Blocklist',       icon: '🛡️' },
   ];
 
   const linkStyle = (isActive) => ({
@@ -110,6 +126,27 @@ export default function AdminLayout() {
             Signed in as <strong style={{ color: S.teal }}>{admin.name || 'Admin'}</strong>
           </span>
         </div>
+
+        {/* Auto-suspension alert banner */}
+        {suspendedCount > 0 && (
+          <div
+            onClick={() => navigate('/admin/blocklist')}
+            style={{
+              padding: '12px 32px',
+              backgroundColor: 'rgba(255,59,92,0.08)',
+              borderBottom: '1px solid rgba(255,59,92,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ fontFamily: "'Inter', sans-serif", fontSize: '0.875rem', color: S.danger, fontWeight: 600 }}>
+              🚨 {suspendedCount} vehicle{suspendedCount > 1 ? 's' : ''} auto-suspended due to excessive abuse reports.
+            </span>
+            <span style={{ fontFamily: "'Inter', sans-serif", fontSize: '0.82rem', color: S.danger, fontWeight: 700, textDecoration: 'underline' }}>
+              Review now →
+            </span>
+          </div>
+        )}
 
         <div style={{ padding: '32px' }}>
           <Outlet />

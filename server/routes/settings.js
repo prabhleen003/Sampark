@@ -12,7 +12,7 @@ import Order      from '../models/Order.js';
 import Notification from '../models/Notification.js';
 import { uploadAvatar } from '../middleware/upload.js';
 import { generateOtp, storeOtp, verifyOtp } from '../utils/otp.js';
-import { encryptPhone } from '../utils/encrypt.js';
+import { encryptPhone, hashPhone } from '../utils/encrypt.js';
 import { calculatePrivacyScore, refreshPrivacyScore } from '../utils/privacyScore.js';
 
 const router = express.Router();
@@ -110,7 +110,8 @@ router.post('/me/change-phone', async (req, res) => {
   }
 
   // Check if the new number is already in use
-  const existing = await User.findOne({ phone_hash: new_phone });
+  const phoneHash = hashPhone(new_phone);
+  const existing = await User.findOne({ phone_hash: phoneHash });
   if (existing) {
     return res.status(409).json({ success: false, message: 'This phone number is already registered' });
   }
@@ -144,8 +145,9 @@ router.post('/me/change-phone/verify', async (req, res) => {
     encrypted = new_phone; // fallback if encrypt util not available
   }
 
+  const phoneHash = hashPhone(new_phone);
   await User.findByIdAndUpdate(req.user.userId, {
-    phone_hash:           new_phone,
+    phone_hash:           phoneHash,
     phone_encrypted:      encrypted,
     token_invalidated_at: new Date(),
   });

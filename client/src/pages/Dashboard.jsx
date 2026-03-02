@@ -574,33 +574,250 @@ function EmergencyContactsModal({ vehicle, onClose }) {
   );
 }
 
+// ── Three-dot menu ────────────────────────────────────────────────────────────
+function ThreeDotMenu({ onTransfer, onDelete }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ border: 'none', background: 'none', color: C.textSecondary, fontSize: '1.1rem', cursor: 'pointer', padding: '2px 7px', borderRadius: '6px', lineHeight: 1 }}
+        title="More options"
+      >
+        ⋮
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+          <div style={{ position: 'absolute', right: 0, top: '110%', backgroundColor: C.panel, border: `1px solid ${C.border}`, borderRadius: '10px', boxShadow: '0 4px 16px rgba(0,0,0,0.35)', minWidth: '170px', zIndex: 100 }}>
+            <button
+              onClick={() => { setOpen(false); onTransfer(); }}
+              style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', background: 'none', color: C.textPrimary, fontSize: '0.85rem', cursor: 'pointer', borderBottom: `1px solid ${C.border}`, borderRadius: '10px 10px 0 0' }}
+            >
+              🔄 Transfer Vehicle
+            </button>
+            <button
+              onClick={() => { setOpen(false); onDelete(); }}
+              style={{ width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', background: 'none', color: C.danger, fontSize: '0.85rem', cursor: 'pointer', borderRadius: '0 0 10px 10px' }}
+            >
+              🗑️ Remove Vehicle
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Transfer Modal ─────────────────────────────────────────────────────────────
+function TransferModal({ vehicle, onClose, onRefresh }) {
+  const [stage, setStage]     = useState('warn');
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
+  const [code, setCode]       = useState('');
+  const [expiresAt, setExpiresAt] = useState(null);
+  const [copied, setCopied]   = useState(false);
+  const [timeLeft, setTimeLeft] = useState('');
+
+  useEffect(() => {
+    if (!expiresAt) return;
+    function update() {
+      const diff = new Date(expiresAt) - Date.now();
+      if (diff <= 0) { setTimeLeft('Expired'); return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      setTimeLeft(`${h}h ${m}m remaining`);
+    }
+    update();
+    const id = setInterval(update, 15000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+
+  async function handleInitiate() {
+    setLoading(true); setError('');
+    try {
+      const { data } = await api.post(`/vehicles/${vehicle._id}/transfer/initiate`);
+      setCode(data.transfer_code);
+      setExpiresAt(data.expires_at);
+      setStage('code');
+      onRefresh();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to initiate transfer');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleCopy() {
+    navigator.clipboard?.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function handleShare() {
+    if (navigator.share) {
+      navigator.share({ title: 'Sampark Transfer Code', text: `Transfer code for ${vehicle.plate_number}: ${code}\nExpires in 48 hours.` });
+    } else {
+      handleCopy();
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '1rem' }}>
+      <div style={{ backgroundColor: C.panel, borderRadius: '16px', padding: '1.5rem', maxWidth: '380px', width: '100%', border: `1px solid ${C.border}` }}>
+        {stage === 'warn' ? (
+          <>
+            <h2 style={{ fontFamily: font.heading, fontSize: '1.2rem', color: C.textPrimary, margin: '0 0 10px' }}>Transfer Vehicle?</h2>
+            <p style={{ color: C.textSecondary, fontSize: '0.85rem', margin: '0 0 6px', lineHeight: 1.7 }}>
+              You are transferring <strong style={{ color: C.textPrimary }}>{vehicle.plate_number}</strong> to a new owner:
+            </p>
+            <ul style={{ color: C.textSecondary, fontSize: '0.82rem', margin: '0 0 16px', paddingLeft: '1.2rem', lineHeight: 2 }}>
+              <li>Your QR code will be <strong style={{ color: C.textPrimary }}>immediately invalidated</strong></li>
+              <li>A transfer code valid for <strong style={{ color: C.textPrimary }}>48 hours</strong> will be generated</li>
+              <li>New owner must re-verify documents to activate</li>
+            </ul>
+            {error && <p style={{ color: C.danger, fontSize: '0.82rem', margin: '0 0 10px' }}>{error}</p>}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${C.border}`, background: 'transparent', color: C.textSecondary, cursor: 'pointer', fontSize: '0.88rem' }}>
+                Cancel
+              </button>
+              <button onClick={handleInitiate} disabled={loading} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: loading ? 'rgba(0,229,160,0.3)' : C.teal, color: C.navy, fontWeight: 700, fontSize: '0.88rem', cursor: loading ? 'not-allowed' : 'pointer' }}>
+                {loading ? 'Generating…' : 'Initiate Transfer'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 style={{ fontFamily: font.heading, fontSize: '1.2rem', color: C.textPrimary, margin: '0 0 6px' }}>Share This Code</h2>
+            <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: '0 0 18px' }}>
+              Give this code to the new owner. They'll use it to claim the vehicle.
+            </p>
+            <div style={{ backgroundColor: C.navy, border: `1px solid ${C.borderTeal}`, borderRadius: '12px', padding: '20px', textAlign: 'center', marginBottom: '14px' }}>
+              <p style={{ fontFamily: font.mono, fontSize: '2rem', fontWeight: 700, color: C.teal, letterSpacing: '0.2em', margin: '0 0 6px' }}>
+                {code}
+              </p>
+              <p style={{ fontSize: '0.75rem', color: C.textSecondary, margin: 0 }}>{timeLeft}</p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              <button onClick={handleCopy} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${C.borderTeal}`, backgroundColor: 'rgba(0,229,160,0.08)', color: C.teal, fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>
+                {copied ? '✓ Copied' : 'Copy Code'}
+              </button>
+              <button onClick={handleShare} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${C.border}`, backgroundColor: 'transparent', color: C.textPrimary, fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>
+                Share
+              </button>
+            </div>
+            <button onClick={onClose} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: C.teal, color: C.navy, fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer' }}>
+              Done
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Delete Modal ───────────────────────────────────────────────────────────────
+function DeleteModal({ vehicle, onClose, onRefresh }) {
+  const [input, setInput]     = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
+  const confirmed = input.trim().toUpperCase() === vehicle.plate_number;
+
+  async function handleDelete() {
+    setLoading(true); setError('');
+    try {
+      await api.delete(`/vehicles/${vehicle._id}`, { data: { plate_number: input.trim() } });
+      onRefresh();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to remove vehicle');
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '1rem' }}>
+      <div style={{ backgroundColor: C.panel, borderRadius: '16px', padding: '1.5rem', maxWidth: '380px', width: '100%', border: '1px solid rgba(255,59,92,0.3)' }}>
+        <h2 style={{ fontFamily: font.heading, fontSize: '1.2rem', color: C.danger, margin: '0 0 8px' }}>Remove Vehicle</h2>
+        <p style={{ color: C.textSecondary, fontSize: '0.85rem', margin: '0 0 16px', lineHeight: 1.6 }}>
+          This will permanently remove <strong style={{ color: C.textPrimary }}>{vehicle.plate_number}</strong> from your account. Your QR code will stop working immediately.
+        </p>
+        <p style={{ color: C.textSecondary, fontSize: '0.82rem', margin: '0 0 8px' }}>
+          Type <strong style={{ color: C.textPrimary, fontFamily: font.mono }}>{vehicle.plate_number}</strong> to confirm:
+        </p>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value.toUpperCase())}
+          placeholder={vehicle.plate_number}
+          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${input && !confirmed ? 'rgba(255,59,92,0.5)' : C.border}`, backgroundColor: C.navy, color: C.textPrimary, fontFamily: font.mono, fontSize: '0.95rem', outline: 'none', marginBottom: '12px' }}
+        />
+        {error && <p style={{ color: C.danger, fontSize: '0.82rem', margin: '0 0 10px' }}>{error}</p>}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${C.border}`, background: 'transparent', color: C.textSecondary, cursor: 'pointer', fontSize: '0.88rem' }}>
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={!confirmed || loading}
+            style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: !confirmed || loading ? 'rgba(255,59,92,0.3)' : '#EF4444', color: '#fff', fontWeight: 700, fontSize: '0.88rem', cursor: !confirmed || loading ? 'not-allowed' : 'pointer' }}
+          >
+            {loading ? 'Removing…' : 'Remove Vehicle'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Vehicle Card ──────────────────────────────────────────────────────────────
-function VehicleCard({ vehicle, payment, onViewQR, onViewActivity, onViewReceipt, onPay, paying, onRenew, renewing, onViewHistory, onViewEmergency, privacyScore, onDigilocker, digilockerLoading }) {
-  const isVerified           = vehicle.status === 'verified';
-  const isFailed             = vehicle.status === 'verification_failed';
-  const isAwaitingDigilocker = vehicle.status === 'awaiting_digilocker';
+function VehicleCard({ vehicle, payment, onViewQR, onViewActivity, onViewReceipt, onPay, paying, onRenew, renewing, onViewHistory, onViewEmergency, privacyScore, onDigilocker, digilockerLoading, onTransfer, onDelete, onCancelTransfer }) {
+  const isVerified              = vehicle.status === 'verified';
+  const isFailed                = vehicle.status === 'verification_failed';
+  const isAwaitingDigilocker    = vehicle.status === 'awaiting_digilocker';
+  const isSuspended             = vehicle.status === 'suspended';
+  const isNeedsReverification   = vehicle.status === 'needs_reverification';
+  const isTransferPending       = vehicle.transfer_status === 'pending';
   const active  = isVerified && isActivePayment(payment);
   const expired = isVerified && payment?.status === 'paid' && !isActivePayment(payment);
   const days = daysRemaining(vehicle);
   const expiring = active && days !== null && days <= 30;
 
+  // Countdown for pending transfer
+  const [transferCountdown, setTransferCountdown] = useState('');
+  useEffect(() => {
+    if (!isTransferPending || !vehicle.transfer_expires_at) return;
+    function update() {
+      const diff = new Date(vehicle.transfer_expires_at) - Date.now();
+      if (diff <= 0) { setTransferCountdown('Expired'); return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      setTransferCountdown(`${h}h ${m}m`);
+    }
+    update();
+    const id = setInterval(update, 30000);
+    return () => clearInterval(id);
+  }, [isTransferPending, vehicle.transfer_expires_at]);
+
   // Badge config
   let badge;
-  if (expiring)             badge = { label: 'Expiring Soon',     bg: 'rgba(251,146,60,0.12)', color: '#FB923C', border: 'rgba(251,146,60,0.3)' };
-  else if (active)          badge = { label: 'Active',            bg: '#ECFDF5', color: '#065F46', border: '#6EE7B7' };
-  else if (expired)         badge = { label: 'Expired',           bg: '#FEF2F2', color: '#991B1B', border: '#FCA5A5' };
-  else if (isVerified)      badge = { label: 'Approved',          bg: '#F0FDF4', color: '#166534', border: '#86EFAC' };
-  else if (isFailed)        badge = { label: 'Review Required',   bg: '#FEF2F2', color: '#991B1B', border: '#FCA5A5' };
-  else if (isAwaitingDigilocker) badge = { label: 'Awaiting DigiLocker', bg: 'rgba(103,183,255,0.12)', color: '#67B7FF', border: 'rgba(103,183,255,0.3)' };
-  else                      badge = { label: 'Processing',        bg: '#FFFBEB', color: '#92400E', border: '#FCD34D' };
+  if (isTransferPending)         badge = { label: 'Transferring',        bg: 'rgba(249,115,22,0.12)', color: '#F97316', border: 'rgba(249,115,22,0.35)' };
+  else if (isNeedsReverification) badge = { label: 'Needs Verification',  bg: 'rgba(103,183,255,0.12)', color: '#67B7FF', border: 'rgba(103,183,255,0.3)' };
+  else if (isSuspended)          badge = { label: 'Suspended',            bg: 'rgba(220,38,38,0.12)', color: '#DC2626', border: 'rgba(220,38,38,0.35)' };
+  else if (expiring)             badge = { label: 'Expiring Soon',        bg: 'rgba(251,146,60,0.12)', color: '#FB923C', border: 'rgba(251,146,60,0.3)' };
+  else if (active)               badge = { label: 'Active',               bg: '#ECFDF5', color: '#065F46', border: '#6EE7B7' };
+  else if (expired)              badge = { label: 'Expired',              bg: '#FEF2F2', color: '#991B1B', border: '#FCA5A5' };
+  else if (isVerified)           badge = { label: 'Approved',             bg: '#F0FDF4', color: '#166534', border: '#86EFAC' };
+  else if (isFailed)             badge = { label: 'Review Required',      bg: '#FEF2F2', color: '#991B1B', border: '#FCA5A5' };
+  else if (isAwaitingDigilocker) badge = { label: 'Awaiting DigiLocker',  bg: 'rgba(103,183,255,0.12)', color: '#67B7FF', border: 'rgba(103,183,255,0.3)' };
+  else                           badge = { label: 'Processing',           bg: '#FFFBEB', color: '#92400E', border: '#FCD34D' };
 
-  const hasDocsSection = isFailed || isVerified || isAwaitingDigilocker;
+  const hasDocsSection = isFailed || isVerified || isAwaitingDigilocker || isNeedsReverification;
 
   return (
     <div style={{
       backgroundColor: C.panel,
-      border: `1px solid ${isFailed ? 'rgba(255,59,92,0.3)' : C.border}`,
-      borderLeft: isFailed ? '4px solid #EF4444' : isAwaitingDigilocker ? '4px solid #67B7FF' : `1px solid ${C.border}`,
+      border: `1px solid ${isSuspended ? 'rgba(220,38,38,0.35)' : isFailed ? 'rgba(255,59,92,0.3)' : C.border}`,
+      borderLeft: isTransferPending ? '4px solid #F97316' : isSuspended ? '4px solid #DC2626' : isFailed ? '4px solid #EF4444' : isAwaitingDigilocker || isNeedsReverification ? '4px solid #67B7FF' : `1px solid ${C.border}`,
       borderRadius: '12px', padding: '1.2rem',
       boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
     }}>
@@ -614,9 +831,14 @@ function VehicleCard({ vehicle, payment, onViewQR, onViewActivity, onViewReceipt
             <ScoreBadge score={privacyScore} />
           )}
         </div>
-        <span style={{ backgroundColor: badge.bg, color: badge.color, border: `1px solid ${badge.border}`, borderRadius: '999px', padding: '3px 12px', fontSize: '0.78rem', fontWeight: 600 }}>
-          {badge.label}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ backgroundColor: badge.bg, color: badge.color, border: `1px solid ${badge.border}`, borderRadius: '999px', padding: '3px 12px', fontSize: '0.78rem', fontWeight: 600 }}>
+            {badge.label}
+          </span>
+          {!isTransferPending && onTransfer && (
+            <ThreeDotMenu onTransfer={() => onTransfer(vehicle)} onDelete={() => onDelete(vehicle)} />
+          )}
+        </div>
       </div>
 
       {/* Expiry line for active/expiring */}
@@ -630,6 +852,56 @@ function VehicleCard({ vehicle, payment, onViewQR, onViewActivity, onViewReceipt
       {isVerified && vehicle.digilocker_verified && (
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: 'rgba(103,183,255,0.1)', border: '1px solid rgba(103,183,255,0.3)', borderRadius: '6px', padding: '3px 10px', marginBottom: '10px', fontSize: '0.75rem', fontWeight: 600, color: '#67B7FF' }}>
           🛡️ DigiLocker Verified
+        </div>
+      )}
+
+      {/* Transfer pending notice */}
+      {isTransferPending && (
+        <div style={{ backgroundColor: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.25)', borderRadius: '8px', padding: '12px', marginBottom: '14px' }}>
+          <p style={{ color: '#F97316', fontSize: '0.82rem', fontWeight: 700, margin: '0 0 6px' }}>Transfer in Progress</p>
+          <p style={{ color: '#F97316', fontSize: '0.78rem', margin: '0 0 10px' }}>
+            Your QR is inactive while the transfer is pending. Share the code below with the new owner.
+          </p>
+          <div style={{ backgroundColor: 'rgba(249,115,22,0.12)', borderRadius: '8px', padding: '10px', textAlign: 'center', marginBottom: '10px' }}>
+            <span style={{ fontFamily: font.mono, fontSize: '1.4rem', fontWeight: 700, color: '#F97316', letterSpacing: '0.15em' }}>
+              {vehicle.transfer_token}
+            </span>
+            {transferCountdown ? (
+              <p style={{ fontSize: '0.72rem', color: '#F97316', margin: '4px 0 0', opacity: 0.8 }}>{transferCountdown} left</p>
+            ) : null}
+          </div>
+          <button
+            onClick={() => onCancelTransfer && onCancelTransfer(vehicle)}
+            style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid rgba(249,115,22,0.4)', backgroundColor: 'transparent', color: '#F97316', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}
+          >
+            Cancel Transfer
+          </button>
+        </div>
+      )}
+
+      {/* Needs reverification notice */}
+      {isNeedsReverification && !isTransferPending && (
+        <div style={{ backgroundColor: 'rgba(103,183,255,0.08)', border: '1px solid rgba(103,183,255,0.25)', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px' }}>
+          <p style={{ color: '#67B7FF', fontSize: '0.82rem', fontWeight: 600, margin: '0 0 2px' }}>Claimed successfully</p>
+          <p style={{ color: '#67B7FF', fontSize: '0.8rem', margin: 0, lineHeight: 1.5 }}>
+            This vehicle was transferred to you. Upload your documents to activate your QR code.
+          </p>
+        </div>
+      )}
+
+      {/* Suspended notice */}
+      {isSuspended && (
+        <div style={{ backgroundColor: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.25)', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px' }}>
+          <p style={{ color: '#DC2626', fontSize: '0.82rem', fontWeight: 600, margin: '0 0 4px' }}>Service suspended</p>
+          <p style={{ color: '#DC2626', fontSize: '0.8rem', margin: '0 0 10px', lineHeight: 1.5 }}>
+            Your Sampark service for this vehicle has been temporarily suspended due to reported concerns. Your QR code is currently inactive.
+          </p>
+          <button
+            onClick={() => window.location.href = 'mailto:support@sampark.in?subject=Vehicle%20suspension%20inquiry'}
+            style={{ padding: '7px 14px', borderRadius: '7px', border: '1px solid rgba(220,38,38,0.4)', backgroundColor: 'rgba(220,38,38,0.12)', color: '#DC2626', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            Contact Support
+          </button>
         </div>
       )}
 
@@ -756,6 +1028,13 @@ function VehicleCard({ vehicle, payment, onViewQR, onViewActivity, onViewReceipt
         </Link>
       )}
 
+      {/* Needs reverification — upload docs to claim */}
+      {isNeedsReverification && (
+        <Link to={`/vehicles/resubmit/${vehicle._id}`} style={{ display: 'block', textAlign: 'center', backgroundColor: '#67B7FF', color: C.navy, borderRadius: '8px', padding: '10px', fontSize: '0.88rem', fontWeight: 600, textDecoration: 'none', marginBottom: '8px' }}>
+          Upload Documents to Activate →
+        </Link>
+      )}
+
       {/* Awaiting DigiLocker — show auth button */}
       {isAwaitingDigilocker && (
         <button
@@ -795,6 +1074,8 @@ export default function Dashboard() {
   const [historyVehicle, setHistoryVehicle] = useState(null);
   const [emergencyVehicle, setEmergencyVehicle] = useState(null);
   const [orders, setOrders] = useState([]);
+  const [transferVehicle, setTransferVehicle] = useState(null);
+  const [deleteVehicle, setDeleteVehicle]     = useState(null);
   const [notifOpen, setNotifOpen]         = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount]     = useState(0);
@@ -1041,6 +1322,23 @@ export default function Dashboard() {
     }
   }
 
+  async function refreshVehicles() {
+    try {
+      const { data } = await api.get('/vehicles');
+      setVehicles(data.vehicles);
+      loadPayments(data.vehicles);
+    } catch {}
+  }
+
+  async function handleCancelTransfer(vehicle) {
+    try {
+      await api.post(`/vehicles/${vehicle._id}/transfer/cancel`);
+      await refreshVehicles();
+    } catch (err) {
+      setPayErr(err.response?.data?.message || 'Failed to cancel transfer');
+    }
+  }
+
   if (!user) {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1050,6 +1348,7 @@ export default function Dashboard() {
   }
 
   const canAddMore = vehicles.filter(v => !['verification_failed', 'deactivated'].includes(v.status)).length < 2;
+  const canClaimVehicle = vehicles.filter(v => !['verification_failed', 'deactivated'].includes(v.status)).length < 2;
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: C.navy, padding: '2rem 1rem' }}>
@@ -1128,11 +1427,18 @@ export default function Dashboard() {
         {/* Vehicles */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
           <h2 style={{ fontSize: '1rem', fontWeight: 600, color: C.textPrimary, margin: 0, fontFamily: font.heading }}>Your Vehicles</h2>
-          {canAddMore && (
-            <Link to="/vehicles/register" style={{ backgroundColor: C.teal, color: C.navy, borderRadius: '8px', padding: '8px 14px', fontSize: '0.85rem', fontWeight: 600, textDecoration: 'none' }}>
-              + Add Vehicle
-            </Link>
-          )}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {canClaimVehicle && (
+              <Link to="/vehicles/claim" style={{ border: `1px solid ${C.borderTeal}`, color: C.teal, borderRadius: '8px', padding: '8px 12px', fontSize: '0.82rem', fontWeight: 600, textDecoration: 'none', backgroundColor: 'rgba(0,229,160,0.06)' }}>
+                Claim Vehicle
+              </Link>
+            )}
+            {canAddMore && (
+              <Link to="/vehicles/register" style={{ backgroundColor: C.teal, color: C.navy, borderRadius: '8px', padding: '8px 14px', fontSize: '0.85rem', fontWeight: 600, textDecoration: 'none' }}>
+                + Add Vehicle
+              </Link>
+            )}
+          </div>
         </div>
 
         {vehicles.length === 0 ? (
@@ -1161,6 +1467,9 @@ export default function Dashboard() {
                 privacyScore={privacyScore}
                 onDigilocker={handleDigilocker}
                 digilockerLoading={digilockerLoading}
+                onTransfer={setTransferVehicle}
+                onDelete={setDeleteVehicle}
+                onCancelTransfer={handleCancelTransfer}
               />
             ))}
           </div>
@@ -1226,6 +1535,8 @@ export default function Dashboard() {
       {historyVehicle && <PaymentHistoryModal vehicle={historyVehicle} onClose={() => setHistoryVehicle(null)} />}
       {emergencyVehicle && <EmergencyContactsModal vehicle={emergencyVehicle} onClose={() => setEmergencyVehicle(null)} />}
       {notifOpen && <NotificationPanel notifications={notifications} onClose={() => setNotifOpen(false)} onMarkRead={handleMarkRead} onMarkAll={handleMarkAll} />}
+      {transferVehicle && <TransferModal vehicle={transferVehicle} onClose={() => setTransferVehicle(null)} onRefresh={refreshVehicles} />}
+      {deleteVehicle && <DeleteModal vehicle={deleteVehicle} onClose={() => setDeleteVehicle(null)} onRefresh={refreshVehicles} />}
     </div>
   );
 }

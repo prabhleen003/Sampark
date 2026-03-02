@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'crypto';
 
 const ALGORITHM = 'aes-256-ctr';
 
@@ -48,4 +48,13 @@ export function maskPhone(phoneOrEncrypted) {
   const plain = decryptPhone(phoneOrEncrypted);
   if (plain.length < 4) return plain;
   return 'xxxxxx' + plain.slice(-4);
+}
+
+/**
+ * Hash a phone number for database storage.
+ * Uses SHA-256 for deterministic, one-way hashing.
+ * Consistent across calls — safe for uniqueness indexes.
+ */
+export function hashPhone(phone) {
+  return createHash('sha256').update(phone).digest('hex');
 }

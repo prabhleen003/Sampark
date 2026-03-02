@@ -1,7 +1,8 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-import { generateOtp, storeOtp, verifyOtp } from '../utils/otp.js';
+import { generateOtp, storeOtp, verifyOtp, canSendOtp, recordOtpSend } from '../utils/otp.js';
+import { hashPhone, encryptPhone } from '../utils/encrypt.js';
 
 const router = express.Router();
 
@@ -15,8 +16,15 @@ router.post('/send-otp', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Enter a valid 10-digit Indian mobile number' });
   }
 
+  // Check rate-limit
+  const rateLimitCheck = canSendOtp(phone);
+  if (!rateLimitCheck.allowed) {
+    return res.status(429).json({ success: false, message: rateLimitCheck.reason });
+  }
+
   const otp = generateOtp();
   storeOtp(phone, otp);
+  recordOtpSend(phone);
 
   // Log OTP to console for dev testing
   console.log(`OTP for ${phone}: ${otp}`);
@@ -44,14 +52,17 @@ router.post('/verify-otp', async (req, res) => {
     return res.status(400).json({ success: false, message: result.reason });
   }
 
+  // Hash the phone for database storage
+  const phoneHash = hashPhone(phone);
+
   // Find or create user
-  let user = await User.findOne({ phone_hash: phone });
+  let user = await User.findOne({ phone_hash: phoneHash });
   const isNewUser = !user;
 
   if (isNewUser) {
     user = await User.create({
-      phone_hash: phone,
-      phone_encrypted: phone, // plain for now — encrypt with AES-256 later
+      phone_hash: phoneHash,
+      phone_encrypted: encryptPhone(phone),
       is_verified: true,
     });
   } else {

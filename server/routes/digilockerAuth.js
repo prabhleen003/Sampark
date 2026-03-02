@@ -10,10 +10,8 @@ import express from 'express';
 import Vehicle from '../models/Vehicle.js';
 import authMiddleware from '../middleware/auth.js';
 import { digilocker } from '../services/verification/index.js';
-import { generateSignedUrl } from '../utils/qr.js';
 import { createNotification } from '../services/notification.js';
 import { refreshPrivacyScore } from '../utils/privacyScore.js';
-import QRCode from 'qrcode';
 
 const router = express.Router();
 
@@ -56,12 +54,18 @@ router.get('/callback', async (req, res) => {
     return res.redirect(`${FRONTEND_URL}/dashboard?digilocker=error&reason=vehicle_not_found`);
   }
 
-  const result = await digilocker.handleCallback(code, state, vehicle);
+  const user = await User.findById(userId).select('name');
+  const result = await digilocker.handleCallback(code, state, vehicle, user);
 
   if (!result.verified) {
     vehicle.status             = 'verification_failed';
     vehicle.rejection_reason   = result.reason;
-    vehicle.needs_manual_review = true;
+    vehicle.verification_failed_count = (vehicle.verification_failed_count || 0) + 1;
+    
+    // Flag for manual review only after 2 failed attempts
+    if (vehicle.verification_failed_count >= 2) {
+      vehicle.needs_manual_review = true;
+    }
     await vehicle.save();
 
     createNotification(
@@ -75,21 +79,13 @@ router.get('/callback', async (req, res) => {
     return res.redirect(`${FRONTEND_URL}/dashboard?digilocker=failed&vehicleId=${vehicleId}`);
   }
 
-  // DigiLocker verified — generate QR
-  const signedUrl = generateSignedUrl(vehicle._id.toString());
-  const qrDataUrl = await QRCode.toDataURL(signedUrl.url, { width: 300, margin: 2 });
-  const validUntil = new Date();
-  validUntil.setFullYear(validUntil.getFullYear() + 1);
-
+  // DigiLocker verified — mark as verified, reset attempt counter, QR will be generated after payment
   vehicle.status                  = 'verified';
   vehicle.verification_method     = result.method;
   vehicle.verification_confidence  = result.confidence;
   vehicle.digilocker_verified      = result.digilockerVerified || false;
   vehicle.needs_manual_review      = false;
-  vehicle.qr_token                 = signedUrl.sig;
-  vehicle.qr_image_url             = qrDataUrl;
-  vehicle.qr_valid_until           = validUntil;
-  vehicle.card_code                = Math.random().toString(36).slice(2, 10).toUpperCase();
+  vehicle.verification_failed_count = 0;  // reset counter on success
   await vehicle.save();
 
   createNotification(

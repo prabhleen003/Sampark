@@ -44,7 +44,7 @@ export function buildAuthUrl(userId, vehicleId) {
  * Step 2 — exchange code for token and pull documents.
  * Returns a result object compatible with the verifier interface.
  */
-export async function handleCallback(code, state, vehicle) {
+export async function handleCallback(code, state, vehicle, user) {
   try {
     // Exchange code for access token
     const tokenRes = await axios.post(DIGILOCKER_TOKEN_URL, new URLSearchParams({
@@ -67,18 +67,17 @@ export async function handleCallback(code, state, vehicle) {
     );
 
     const docs = docsRes.data?.items || [];
-    const hasRC = docs.some(d => d.type === VAHAN_DOC_TYPE);
-    const hasDL = docs.some(d => d.type === SARATHI_DOC_TYPE);
+    const rcDoc = docs.find(d => d.type === VAHAN_DOC_TYPE);
+    const dlDoc = docs.find(d => d.type === SARATHI_DOC_TYPE);
 
-    if (!hasRC) {
+    if (!rcDoc) {
       return { verified: false, reason: 'Vehicle Registration Certificate not found in DigiLocker.' };
     }
-    if (!hasDL) {
+    if (!dlDoc) {
       return { verified: false, reason: 'Driving Licence not found in DigiLocker.' };
     }
 
-    // Fetch RC details for plate match
-    const rcDoc  = docs.find(d => d.type === VAHAN_DOC_TYPE);
+    // Fetch RC details for plate match and owner name check
     const rcData = await axios.get(
       `https://api.digitallocker.gov.in/public/oauth2/1/xml/issueddoc/${rcDoc.uri}`,
       { headers: { Authorization: `Bearer ${access_token}` } }
@@ -92,6 +91,47 @@ export async function handleCallback(code, state, vehicle) {
         verified: false,
         reason: `Plate mismatch: DigiLocker shows ${digiPlate}, submitted ${ourPlate}.`,
       };
+    }
+
+    // Check RC owner name if user has a profile name set
+    const rcOwnerName = (rcData.data?.holderName || '').trim().toUpperCase();
+    const userProfileName = (user?.name || '').trim().toUpperCase();
+    
+    if (userProfileName && rcOwnerName) {
+      // Simple name matching: check if names are similar (exact or contain each other's first/last parts)
+      const rcNameWords = rcOwnerName.split(/\s+/);
+      const userNameWords = userProfileName.split(/\s+/);
+      
+      const hasCommonWord = rcNameWords.some(rcWord => 
+        userNameWords.some(userWord => rcWord === userWord || rcWord.includes(userWord) || userWord.includes(rcWord))
+      );
+      
+      if (!hasCommonWord) {
+        return {
+          verified: false,
+          reason: `Name mismatch: RC shows "${rcOwnerName}", your profile shows "${userProfileName}".`,
+        };
+      }
+    }
+
+    // Fetch DL details for validity check
+    const dlData = await axios.get(
+      `https://api.digitallocker.gov.in/public/oauth2/1/xml/issueddoc/${dlDoc.uri}`,
+      { headers: { Authorization: `Bearer ${access_token}` } }
+    );
+
+    // Check DL validity (expiryDate should be in future)
+    const dlExpiryStr = dlData.data?.expiryDate || '';
+    if (dlExpiryStr) {
+      const expiryDate = new Date(dlExpiryStr);
+      const now = new Date();
+      
+      if (expiryDate < now) {
+        return {
+          verified: false,
+          reason: `Your Driving Licence expired on ${expiryDate.toLocaleDateString('en-IN')}. Please renew it.`,
+        };
+      }
     }
 
     return { verified: true, method: 'digilocker', confidence: 'high', digilockerVerified: true };

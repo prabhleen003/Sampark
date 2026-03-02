@@ -16,6 +16,7 @@ const emergencySessionSchema = new mongoose.Schema(
     description:  { type: String, default: null },
     stage:        { type: String, enum: STAGES, default: 'calling_owner' },
     connected_to: { type: String, default: null }, // 'owner' | 'contact_1' | 'contact_2' | 'contact_3'
+    blocked_caller_emergency: { type: Boolean, default: false }, // true if caller was blocked but emergency bypassed
   },
   { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
 );

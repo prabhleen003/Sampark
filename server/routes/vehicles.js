@@ -1,13 +1,24 @@
 import express from 'express';
 import Vehicle from '../models/Vehicle.js';
+import Payment from '../models/Payment.js';
 import CallLog from '../models/CallLog.js';
+import ScanLog from '../models/ScanLog.js';
 import authMiddleware from '../middleware/auth.js';
 import { uploadVehicleDocs } from '../middleware/upload.js';
 import { encryptPhone, maskPhone } from '../utils/encrypt.js';
 import { refreshPrivacyScore } from '../utils/privacyScore.js';
 import { runVerifier } from '../services/verification/index.js';
-import { generateSignedUrl } from '../utils/qr.js';
-import QRCode from 'qrcode';
+
+// returns true if there is an active paid payment for the vehicle
+async function hasActivePayment(vehicleId) {
+  const now = new Date();
+  const payment = await Payment.findOne({
+    vehicle_id: vehicleId,
+    status: 'paid',
+    valid_until: { $gt: now },
+  }).select('_id');
+  return !!payment;
+}
 
 const router = express.Router();
 
@@ -41,14 +52,14 @@ router.post('/', authMiddleware, (req, res) => {
       return res.status(400).json({ success: false, message: 'All three documents are required' });
     }
 
-    // Max 2 vehicles per user
-    const count = await Vehicle.countDocuments({ user_id: req.user.userId });
+    // Max 2 active vehicles per user
+    const count = await Vehicle.countDocuments({ user_id: req.user.userId, deactivated_at: null });
     if (count >= 2) {
       return res.status(400).json({ success: false, message: 'Maximum 2 vehicles allowed per account' });
     }
 
-    // Check duplicate plate
-    const existing = await Vehicle.findOne({ plate_number: plate_number.toUpperCase() });
+    // Check duplicate plate (exclude soft-deleted vehicles)
+    const existing = await Vehicle.findOne({ plate_number: plate_number.toUpperCase(), deactivated_at: null });
     if (existing) {
       return res.status(409).json({ success: false, message: 'This plate number is already registered' });
     }
@@ -80,33 +91,35 @@ router.post('/', authMiddleware, (req, res) => {
 
     if (result.verified) {
       // Basic mode — auto-approve
-      const signedUrl = generateSignedUrl(vehicle._id.toString());
-      const qrDataUrl = await QRCode.toDataURL(signedUrl.url, { width: 300, margin: 2 });
-      const validUntil = new Date();
-      validUntil.setFullYear(validUntil.getFullYear() + 1);
-
       vehicle.status                 = 'verified';
       vehicle.verification_method    = result.method;
       vehicle.verification_confidence = result.confidence;
-      vehicle.qr_token               = signedUrl.sig;
-      vehicle.qr_image_url           = qrDataUrl;
-      vehicle.qr_valid_until         = validUntil;
-      vehicle.card_code              = Math.random().toString(36).slice(2, 10).toUpperCase();
+      vehicle.verification_failed_count = 0;  // reset counter on success
       await vehicle.save();
 
       res.status(201).json({ success: true, vehicle, next_step: 'payment' });
     } else {
-      // Verification failed — flag for manual review
+      // Verification failed — increment attempt counter
       vehicle.status             = 'verification_failed';
       vehicle.rejection_reason   = result.reason;
-      vehicle.needs_manual_review = true;
+      vehicle.verification_failed_count = (vehicle.verification_failed_count || 0) + 1;
+      
+      // Flag for manual review only after 2 failed attempts
+      if (vehicle.verification_failed_count >= 2) {
+        vehicle.needs_manual_review = true;
+      }
       await vehicle.save();
+
+      const nextStep = vehicle.needs_manual_review ? 'manual_review' : 'resubmit';
+      const message = vehicle.needs_manual_review 
+        ? result.reason 
+        : `Verification failed. ${2 - vehicle.verification_failed_count} attempt(s) remaining before manual review.`;
 
       res.status(201).json({
         success: true,
         vehicle,
-        next_step: 'manual_review',
-        message: result.reason,
+        next_step: nextStep,
+        message,
       });
     }
 
@@ -114,10 +127,27 @@ router.post('/', authMiddleware, (req, res) => {
   });
 });
 
-// GET /api/v1/vehicles  (protected)
+// GET /api/v1/vehicles  (protected) — excludes soft-deleted vehicles
 router.get('/', authMiddleware, async (req, res) => {
-  const vehicles = await Vehicle.find({ user_id: req.user.userId }).select('-__v');
-  res.json({ success: true, vehicles });
+  const vehicles = await Vehicle.find({ user_id: req.user.userId, deactivated_at: null }).select('-__v');
+
+  // Append scan counts for verified vehicles
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const scanData = await Promise.all(
+    vehicles.map(v => Promise.all([
+      ScanLog.countDocuments({ vehicle_id: v._id }),
+      ScanLog.countDocuments({ vehicle_id: v._id, scanned_at: { $gte: monthStart } }),
+    ]))
+  );
+
+  const vehiclesWithScans = vehicles.map((v, i) => ({
+    ...v.toObject(),
+    total_scans: scanData[i][0],
+    scans_this_month: scanData[i][1],
+  }));
+
+  res.json({ success: true, vehicles: vehiclesWithScans });
 });
 
 // GET /api/v1/vehicles/:id  (protected)
@@ -133,7 +163,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
   res.json({ success: true, vehicle });
 });
 
-// GET /api/v1/vehicles/:id/qr  (protected) — returns QR image for verified vehicle
+// GET /api/v1/vehicles/:id/qr  (protected) — returns QR image for verified & paid vehicle
 router.get('/:id/qr', authMiddleware, async (req, res) => {
   const vehicle = await Vehicle.findOne({
     _id: req.params.id,
@@ -145,6 +175,9 @@ router.get('/:id/qr', authMiddleware, async (req, res) => {
   }
   if (vehicle.status !== 'verified' || !vehicle.qr_image_url) {
     return res.status(400).json({ success: false, message: 'QR code not available yet' });
+  }
+  if (!(await hasActivePayment(vehicle._id))) {
+    return res.status(403).json({ success: false, message: 'QR inactive until payment is made' });
   }
 
   res.json({
@@ -178,13 +211,16 @@ router.get('/:id/call-logs', authMiddleware, async (req, res) => {
   res.json({ success: true, logs, total, page });
 });
 
-// GET /api/v1/vehicles/:id/qr-card  (protected) — data for printable card
+// GET /api/v1/vehicles/:id/qr-card  (protected) — data for printable card (must be paid)
 router.get('/:id/qr-card', authMiddleware, async (req, res) => {
   const vehicle = await Vehicle.findOne({ _id: req.params.id, user_id: req.user.userId })
     .select('status qr_image_url plate_number qr_valid_until card_code');
   if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
   if (vehicle.status !== 'verified' || !vehicle.qr_image_url) {
     return res.status(400).json({ success: false, message: 'QR not available yet' });
+  }
+  if (!(await hasActivePayment(vehicle._id))) {
+    return res.status(403).json({ success: false, message: 'QR inactive until payment is made' });
   }
   // Lazy card_code generation for vehicles that predate Step 8
   if (!vehicle.card_code) {
@@ -207,8 +243,9 @@ router.put('/:id', authMiddleware, (req, res) => {
 
     const vehicle = await Vehicle.findOne({ _id: req.params.id, user_id: req.user.userId });
     if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
-    if (!['verification_failed', 'awaiting_digilocker'].includes(vehicle.status)) {
-      return res.status(400).json({ success: false, message: 'Only vehicles with failed verification can be resubmitted' });
+    // allow resubmission for failed/verifier-awaiting or transfer re-verification status
+    if (!['verification_failed', 'awaiting_digilocker', 'needs_reverification'].includes(vehicle.status)) {
+      return res.status(400).json({ success: false, message: 'Only vehicles requiring verification can be resubmitted' });
     }
 
     if (!req.files?.rc_doc || !req.files?.dl_doc || !req.files?.plate_photo) {
@@ -233,26 +270,30 @@ router.put('/:id', authMiddleware, (req, res) => {
     }
 
     if (result.verified) {
-      const signedUrl = generateSignedUrl(vehicle._id.toString());
-      const qrDataUrl = await QRCode.toDataURL(signedUrl.url, { width: 300, margin: 2 });
-      const validUntil = new Date();
-      validUntil.setFullYear(validUntil.getFullYear() + 1);
-
       vehicle.status                  = 'verified';
       vehicle.verification_method     = result.method;
       vehicle.verification_confidence  = result.confidence;
-      vehicle.qr_token                 = signedUrl.sig;
-      vehicle.qr_image_url             = qrDataUrl;
-      vehicle.qr_valid_until           = validUntil;
-      vehicle.card_code                = Math.random().toString(36).slice(2, 10).toUpperCase();
+      vehicle.verification_failed_count = 0;  // reset counter on success
       await vehicle.save();
       res.json({ success: true, vehicle, next_step: 'payment' });
     } else {
+      // Verification failed — increment attempt counter
       vehicle.status              = 'verification_failed';
       vehicle.rejection_reason    = result.reason;
-      vehicle.needs_manual_review = true;
+      vehicle.verification_failed_count = (vehicle.verification_failed_count || 0) + 1;
+      
+      // Flag for manual review only after 2 failed attempts
+      if (vehicle.verification_failed_count >= 2) {
+        vehicle.needs_manual_review = true;
+      }
       await vehicle.save();
-      res.json({ success: true, vehicle, next_step: 'manual_review', message: result.reason });
+      
+      const nextStep = vehicle.needs_manual_review ? 'manual_review' : 'resubmit';
+      const message = vehicle.needs_manual_review 
+        ? result.reason 
+        : `Verification failed. ${2 - vehicle.verification_failed_count} attempt(s) remaining before manual review.`;
+      
+      res.json({ success: true, vehicle, next_step: nextStep, message });
     }
 
     refreshPrivacyScore(req.user.userId);
