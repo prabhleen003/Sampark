@@ -406,7 +406,11 @@ router.post('/:vehicleId/fallback-message', async (req, res) => {
   const log = await CallLog.findOne({ vehicle_id: vehicleId, fallback_token, fallback_token_used: false });
   if (!log) return res.status(403).json({ success: false, message: 'Invalid or already used token' });
   if (!log.fallback_expires || log.fallback_expires < new Date()) {
-    return res.status(410).json({ success: false, message: 'Message window has expired' });
+    return res.status(410).json({
+      success: false,
+      message: 'Message window has expired. Please scan the QR again.',
+      action: 'scan_again',
+    });
   }
 
   log.fallback_message    = message.trim();

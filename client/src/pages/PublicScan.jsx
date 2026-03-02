@@ -137,8 +137,20 @@ function CallPanel({ vehicleId, sig, onClose }) {
         body: JSON.stringify({ fallback_token: fallbackToken, message: msg, urgency }),
       });
       const data = await r.json();
-      if (data.success) setStep('sent');
-      else setSendErr(data.message || 'Failed to send message');
+      if (data.success) {
+        setStep('sent');
+        return;
+      }
+      if (r.status === 410 || data.action === 'scan_again') {
+        setStep('expired');
+        setSendErr(data.message || 'Message window has expired. Please scan the QR again.');
+        setTimeout(() => {
+          onClose();
+          window.location.assign(`/v/${vehicleId}?sig=${encodeURIComponent(sig)}`);
+        }, 1600);
+        return;
+      }
+      setSendErr(data.message || 'Failed to send message');
     } catch { setSendErr('Network error.'); }
     finally { setSending(false); }
   }
@@ -215,6 +227,15 @@ function CallPanel({ vehicleId, sig, onClose }) {
           <p style={{ color: C.teal, fontWeight: 700, fontSize: '1rem', margin: '0 0 6px' }}>Message sent!</p>
           <p style={{ color: C.textSecondary, fontSize: '0.85rem', margin: '0 0 1.5rem' }}>The owner has been notified.</p>
           <button onClick={onClose} style={btnStyle(C.teal, '#0A0F2C')}>Done</button>
+        </div>
+      )}
+      {step === 'expired' && (
+        <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>⏱️</div>
+          <p style={{ color: C.amber, fontWeight: 700, fontSize: '1rem', margin: '0 0 6px' }}>Message window expired</p>
+          <p style={{ color: C.textSecondary, fontSize: '0.85rem', margin: 0 }}>
+            {sendErr || 'Message window has expired. Please scan the QR again.'}
+          </p>
         </div>
       )}
     </BottomSheet>
