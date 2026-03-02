@@ -64,11 +64,13 @@ const outlineBtn = {
   color: '#94A3B8', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer',
 };
 
+// Must stay in sync with MESSAGE_TEMPLATES in server/routes/public.js
 const FALLBACK_TEMPLATES = [
-  "Please move your vehicle — it's blocking mine",
-  'Your car lights are on',
-  'Urgent — please call back',
-  'Your car is being towed',
+  { id: 1, text: 'Your car is blocking my vehicle' },
+  { id: 2, text: 'Your car lights are on' },
+  { id: 3, text: 'Your car is being towed' },
+  { id: 4, text: 'Your car alarm is going off' },
+  { id: 5, text: 'Need to talk — please call back' },
 ];
 
 const URGENCY_CONFIG = {
@@ -128,7 +130,7 @@ function CallPanel({ vehicleId, sig, onClose }) {
   }
 
   async function handleFallbackSend() {
-    const msg = selectedTpl !== null ? FALLBACK_TEMPLATES[selectedTpl] : customMsg.trim();
+    const msg = selectedTpl !== null ? FALLBACK_TEMPLATES[selectedTpl].text : customMsg.trim();
     if (!msg) return;
     setSending(true); setSendErr('');
     try {
@@ -199,7 +201,7 @@ function CallPanel({ vehicleId, sig, onClose }) {
           {FALLBACK_TEMPLATES.map((t, i) => (
             <button key={i} onClick={() => { setSelectedTpl(i); setCustomMsg(''); }}
               style={{ width: '100%', textAlign: 'left', padding: '11px 14px', borderRadius: '10px', marginBottom: '8px', border: `1px solid ${selectedTpl === i ? C.teal : C.border}`, backgroundColor: selectedTpl === i ? 'rgba(0,229,160,0.08)' : 'rgba(255,255,255,0.03)', color: selectedTpl === i ? C.teal : C.textPrimary, cursor: 'pointer', fontSize: '0.88rem' }}>
-              {t}
+              {t.text}
             </button>
           ))}
           <textarea placeholder="Or type a custom message…" value={customMsg} onChange={e => { setCustomMsg(e.target.value.slice(0, 300)); setSelectedTpl(null); }}
@@ -268,7 +270,7 @@ function MessagePanel({ vehicleId, sig, templates, onClose }) {
     finally { setSending(false); }
   }
 
-  const tplList = templates.length > 0 ? templates : FALLBACK_TEMPLATES.map((t, i) => ({ id: i + 1, text: t }));
+  const tplList = templates.length > 0 ? templates : FALLBACK_TEMPLATES;
   const canProceed = selected !== null || custom.trim().length > 0;
 
   return (

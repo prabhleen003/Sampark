@@ -79,6 +79,7 @@ function QRModal({ vehicle, onClose, onPrint, onOrder }) {
   }
 
   function copyLink() {
+    if (!qrData?.qr_token) return;
     const appUrl = import.meta.env.VITE_APP_URL || 'http://localhost:5173';
     const link = `${appUrl}/v/${vehicle._id}?sig=${qrData.qr_token}`;
     navigator.clipboard.writeText(link).then(() => {
@@ -107,7 +108,7 @@ function QRModal({ vehicle, onClose, onPrint, onOrder }) {
               <button onClick={download} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: C.teal, color: C.navy, fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', fontFamily: font.body }}>
                 Download PNG
               </button>
-              <button onClick={copyLink} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${C.border}`, backgroundColor: 'rgba(255,255,255,0.05)', color: C.textPrimary, fontWeight: 600, fontSize: '0.88rem', cursor: 'pointer', fontFamily: font.body }}>
+              <button onClick={copyLink} disabled={!qrData?.qr_token} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${C.border}`, backgroundColor: 'rgba(255,255,255,0.05)', color: qrData?.qr_token ? C.textPrimary : C.textSecondary, fontWeight: 600, fontSize: '0.88rem', cursor: qrData?.qr_token ? 'pointer' : 'not-allowed', fontFamily: font.body }}>
                 {copyLabel}
               </button>
             </div>
@@ -926,12 +927,12 @@ function VehicleCard({ vehicle, payment, onViewQR, onViewActivity, onViewReceipt
           <div key={label} style={{ textAlign: 'center' }}>
             <p style={{ fontSize: '0.75rem', fontWeight: 600, color: C.textSecondary, marginBottom: '4px' }}>{label}</p>
             {url?.endsWith('.pdf') ? (
-              <a href={`http://localhost:5000${url}`} target="_blank" rel="noreferrer"
+              <a href={`${import.meta.env.VITE_BACKEND_URL || ''}${url}`} target="_blank" rel="noreferrer"
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '56px', backgroundColor: C.slate, border: `1px solid ${C.border}`, borderRadius: '8px', fontSize: '0.78rem', color: C.accent, fontWeight: 600, textDecoration: 'none' }}>
                 PDF
               </a>
             ) : (
-              <img src={`http://localhost:5000${url}`} alt={label} style={{ height: '56px', width: '100%', objectFit: 'cover', borderRadius: '8px', border: `1px solid ${C.border}` }} />
+              <img src={`${import.meta.env.VITE_BACKEND_URL || ''}${url}`} alt={label} style={{ height: '56px', width: '100%', objectFit: 'cover', borderRadius: '8px', border: `1px solid ${C.border}` }} />
             )}
           </div>
         ))}

@@ -12,7 +12,7 @@ import Order      from '../models/Order.js';
 import Notification from '../models/Notification.js';
 import { uploadAvatar } from '../middleware/upload.js';
 import { generateOtp, storeOtp, verifyOtp } from '../utils/otp.js';
-import { encryptPhone, hashPhone } from '../utils/encrypt.js';
+import { encryptPhone, hashPhone, decryptPhone } from '../utils/encrypt.js';
 import { calculatePrivacyScore, refreshPrivacyScore } from '../utils/privacyScore.js';
 
 const router = express.Router();
@@ -24,26 +24,26 @@ const VALID_LANGS     = ['en', 'hi'];
 
 // ── GET /api/v1/users/me/settings ────────────────────────────────────────────
 router.get('/me/settings', async (req, res) => {
-  const user = await User.findById(req.user.userId).select('-__v -phone_encrypted');
+  const user = await User.findById(req.user.userId).select('-__v');
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
   const vehicleCount = await Vehicle.countDocuments({ user_id: user._id, status: { $ne: 'deactivated' } });
 
-  const masked_phone = user.phone_hash
-    ? `******${user.phone_hash.slice(-4)}`
+  const masked_phone = user.phone_encrypted
+    ? `******${decryptPhone(user.phone_encrypted).slice(-4)}`
     : null;
 
   res.json({
     success: true,
     settings: {
-      name:                    user.name,
-      email:                   user.email,
+      name:                     user.name,
+      email:                    user.email,
       masked_phone,
-      language:                user.language,
-      avatar_url:              user.avatar_url,
+      language:                 user.language,
+      avatar_url:               user.avatar_url,
       notification_preferences: user.notification_preferences,
-      account_created:         user.created_at,
-      active_vehicles:         vehicleCount,
+      account_created:          user.created_at,
+      active_vehicles:          vehicleCount,
     },
   });
 });
@@ -190,7 +190,7 @@ router.get('/me/export', async (req, res) => {
   const userId = req.user.userId;
 
   const [user, vehicles, payments, orders, notifs] = await Promise.all([
-    User.findById(userId).select('name email phone_hash language created_at'),
+    User.findById(userId).select('name email phone_encrypted language created_at'),
     Vehicle.find({ user_id: userId }).select('plate_number status qr_valid_until emergency_contacts created_at'),
     Payment.find({ vehicle_id: { $in: (await Vehicle.find({ user_id: userId }).select('_id')).map(v => v._id) } })
       .select('amount status valid_from valid_until txnid created_at'),
@@ -207,7 +207,7 @@ router.get('/me/export', async (req, res) => {
     profile: {
       name:         user.name,
       email:        user.email,
-      masked_phone: `******${user.phone_hash?.slice(-4)}`,
+      masked_phone: user.phone_encrypted ? `******${decryptPhone(user.phone_encrypted).slice(-4)}` : null,
       language:     user.language,
       member_since: user.created_at,
     },
@@ -217,7 +217,7 @@ router.get('/me/export', async (req, res) => {
       qr_valid_until:      v.qr_valid_until,
       emergency_contacts:  (v.emergency_contacts || []).map(c => ({
         label:         c.label,
-        masked_phone:  `******${c.phone_encrypted?.slice(-4) || '????'}`,
+        masked_phone:  c.phone_encrypted ? `******${decryptPhone(c.phone_encrypted).slice(-4)}` : '******????',
         priority:      c.priority,
       })),
       registered_at: v.created_at,

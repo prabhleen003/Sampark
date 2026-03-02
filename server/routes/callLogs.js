@@ -6,6 +6,7 @@ import Blocklist   from '../models/Blocklist.js';
 import User        from '../models/User.js';
 import { refreshPrivacyScore } from '../utils/privacyScore.js';
 import { createNotification }  from '../services/notification.js';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -64,8 +65,8 @@ async function checkAutoEscalation(vehicleId, callerHash) {
   }
 }
 
-// POST /api/v1/call-logs/:logId/report  (protected)
-router.post('/:logId/report', async (req, res) => {
+// POST /api/v1/call-logs/:logId/report  (protected — auth enforced here and at mount level)
+router.post('/:logId/report', authMiddleware, async (req, res) => {
   const { reason } = req.body;
 
   if (!reason || !VALID_REASONS.includes(reason)) {

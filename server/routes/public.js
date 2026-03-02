@@ -105,11 +105,12 @@ router.post('/sms-lookup', async (req, res) => {
     card_code: card_code.trim().toUpperCase(),
     deactivated_at: null,
     status: 'verified',
-  }).select('_id plate_number');
-  if (!vehicle) {
+  }).select('_id plate_number qr_token');
+  if (!vehicle || !vehicle.qr_token) {
     return res.status(404).json({ success: false, message: 'No active vehicle found with this code' });
   }
-  const publicUrl = `${process.env.APP_URL}/v/${vehicle._id}`;
+  const appUrl = process.env.APP_URL || 'http://localhost:5173';
+  const publicUrl = `${appUrl}/v/${vehicle._id}?sig=${vehicle.qr_token}`;
   res.json({ success: true, vehicle_id: vehicle._id, plate_number: vehicle.plate_number, public_url: publicUrl });
 });
 
@@ -226,8 +227,13 @@ router.post('/:vehicleId/message', async (req, res) => {
     return res.status(403).json({ success: false, message: 'This vehicle is in silent mode' });
   }
 
-  // Blocklist check (use sender_phone as identifier if provided)
-  if (sender_phone && await isCallerBlocked(sender_phone, vehicleId)) {
+  // Require sender phone — needed for blocklist enforcement and abuse reporting
+  if (!sender_phone || !INDIAN_PHONE_RE.test(sender_phone)) {
+    return res.status(400).json({ success: false, message: 'Enter a valid 10-digit Indian mobile number' });
+  }
+
+  // Blocklist check — hash the phone before querying (Blocklist stores caller_hash, not raw phone)
+  if (await isCallerBlocked(hashPhone(sender_phone), vehicleId)) {
     return res.status(403).json({ success: false, message: 'You are unable to contact this vehicle at this time.' });
   }
 
@@ -242,7 +248,7 @@ router.post('/:vehicleId/message', async (req, res) => {
   const log = await CallLog.create({
     vehicle_id: vehicleId,
     type: 'message',
-    sender_phone_hash: sender_phone ? hashPhone(sender_phone) : null,
+    sender_phone_hash: hashPhone(sender_phone),
     template_id: template_id || null,
     custom_text: custom_text?.trim() || null,
   });
@@ -288,8 +294,8 @@ router.post('/:vehicleId/call', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Enter a valid 10-digit Indian mobile number' });
   }
 
-  // 4b. Blocklist check
-  if (await isCallerBlocked(caller_phone, vehicleId)) {
+  // 4b. Blocklist check — hash the phone before querying (Blocklist stores caller_hash, not raw phone)
+  if (await isCallerBlocked(hashPhone(caller_phone), vehicleId)) {
     return res.status(403).json({ success: false, message: 'You are unable to contact this vehicle at this time.' });
   }
 
@@ -482,7 +488,7 @@ router.post('/:vehicleId/emergency', async (req, res) => {
 
   const vehicle = await Vehicle.findById(vehicleId)
     .select('status user_id plate_number emergency_contacts qr_valid_until');
-  if (!vehicle || !['verified', 'suspended'].includes(vehicle.status)) {
+  if (!vehicle || vehicle.status !== 'verified') {
     return res.status(404).json({ success: false, message: 'Vehicle not found' });
   }
   if (vehicle.qr_valid_until && new Date() > new Date(vehicle.qr_valid_until)) {
@@ -492,8 +498,8 @@ router.post('/:vehicleId/emergency', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Valid 10-digit phone required' });
   }
 
-  // Emergency calls bypass blocks but log if caller is blocked
-  const callerIsBlocked = await isCallerBlocked(caller_phone, vehicleId);
+  // Emergency calls bypass blocks but log if caller is blocked — hash before querying
+  const callerIsBlocked = await isCallerBlocked(hashPhone(caller_phone), vehicleId);
 
   const owner = await User.findById(vehicle.user_id).select('phone_encrypted');
   if (!owner) return res.status(500).json({ success: false, message: 'Could not reach vehicle owner' });

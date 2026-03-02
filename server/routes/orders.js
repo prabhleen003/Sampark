@@ -4,6 +4,7 @@ import Vehicle from '../models/Vehicle.js';
 import Payment from '../models/Payment.js';
 import Order from '../models/Order.js';
 import User from '../models/User.js';
+import { decryptPhone } from '../utils/encrypt.js';
 
 const router = express.Router();
 
@@ -36,7 +37,7 @@ router.post('/create', async (req, res) => {
 
   const [vehicle, user] = await Promise.all([
     Vehicle.findOne({ _id: vehicle_id, user_id: req.user.userId }).select('_id status'),
-    User.findById(req.user.userId).select('name phone_hash'),
+    User.findById(req.user.userId).select('name phone_encrypted'),
   ]);
 
   if (!vehicle) {
@@ -73,7 +74,7 @@ router.post('/create', async (req, res) => {
   const productinfo  = `Sampark Physical Card - ${type === 'express' ? 'Express' : 'Standard'} Delivery`;
   const firstname    = (user?.name || 'User').split(' ')[0];
   const email        = 'noreply@sampark.app';
-  const phone        = user?.phone_hash || '0000000000';
+  const phone        = user?.phone_encrypted ? decryptPhone(user.phone_encrypted) : '0000000000';
 
   await Order.create({
     user_id: req.user.userId,

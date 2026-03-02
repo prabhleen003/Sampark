@@ -8,6 +8,7 @@
 
 import express from 'express';
 import Vehicle from '../models/Vehicle.js';
+import User from '../models/User.js';
 import authMiddleware from '../middleware/auth.js';
 import { digilocker } from '../services/verification/index.js';
 import { createNotification } from '../services/notification.js';

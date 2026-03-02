@@ -7,6 +7,7 @@ import User from '../models/User.js';
 import { generateSignedUrl } from '../utils/qr.js';
 import { createNotification } from '../services/notification.js';
 import { refreshPrivacyScore } from '../utils/privacyScore.js';
+import { decryptPhone } from '../utils/encrypt.js';
 
 const router = express.Router();
 
@@ -45,7 +46,7 @@ router.post('/create-order', async (req, res) => {
 
   const [vehicle, user] = await Promise.all([
     Vehicle.findOne({ _id: vehicle_id, user_id: req.user.userId }),
-    User.findById(req.user.userId).select('name phone_hash'),
+    User.findById(req.user.userId).select('name phone_encrypted'),
   ]);
 
   if (!vehicle) {
@@ -69,7 +70,7 @@ router.post('/create-order', async (req, res) => {
   const productinfo = 'Sampark QR Card - 1 Year';
   const firstname  = (user?.name || 'User').split(' ')[0];
   const email      = `noreply@sampark.app`;
-  const phone      = user?.phone_hash || '0000000000';
+  const phone      = user?.phone_encrypted ? decryptPhone(user.phone_encrypted) : '0000000000';
 
   await Payment.create({
     user_id: req.user.userId,
@@ -177,7 +178,7 @@ router.post('/renew', async (req, res) => {
 
   const [vehicle, user] = await Promise.all([
     Vehicle.findOne({ _id: vehicle_id, user_id: req.user.userId }),
-    User.findById(req.user.userId).select('name phone_hash'),
+    User.findById(req.user.userId).select('name phone_encrypted'),
   ]);
 
   if (!vehicle) {
@@ -205,7 +206,7 @@ router.post('/renew', async (req, res) => {
   const productinfo = 'Sampark QR Renewal - 1 Year';
   const firstname  = (user?.name || 'User').split(' ')[0];
   const email      = 'noreply@sampark.app';
-  const phone      = user?.phone_hash || '0000000000';
+  const phone      = user?.phone_encrypted ? decryptPhone(user.phone_encrypted) : '0000000000';
 
   await Payment.create({
     user_id: req.user.userId,

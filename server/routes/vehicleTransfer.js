@@ -211,12 +211,23 @@ router.get('/:id/transfer/status', authMiddleware, async (req, res) => {
     }
 
     const now = new Date();
-    const isExpired = vehicle.transfer_expires_at && vehicle.transfer_expires_at < now;
+    const isExpired = vehicle.transfer_status === 'pending' &&
+      vehicle.transfer_expires_at &&
+      vehicle.transfer_expires_at < now;
+
+    // Auto-cancel expired transfer so the owner can immediately initiate a new one
+    if (isExpired) {
+      vehicle.transfer_status       = 'none';
+      vehicle.transfer_token        = null;
+      vehicle.transfer_initiated_at = null;
+      vehicle.transfer_expires_at   = null;
+      await vehicle.save();
+    }
 
     res.json({
       success: true,
       transfer_status: vehicle.transfer_status,
-      transfer_code: vehicle.transfer_status === 'pending' && !isExpired ? vehicle.transfer_token : null,
+      transfer_code: vehicle.transfer_status === 'pending' ? vehicle.transfer_token : null,
       transfer_initiated_at: vehicle.transfer_initiated_at,
       transfer_expires_at: vehicle.transfer_expires_at,
       is_expired: isExpired,

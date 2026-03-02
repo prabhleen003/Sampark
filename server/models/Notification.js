@@ -27,6 +27,13 @@ const NOTIF_TYPES = [
   // Abuse
   'abuse_report_filed',
   'abuse_report_resolved',
+  // Suspension
+  'vehicle_suspended',
+  'auto_suspension',
+  // Transfers
+  'transfer_initiated',
+  'vehicle_transferred_out',
+  'vehicle_transferred_in',
 ];
 
 const notificationSchema = new mongoose.Schema(

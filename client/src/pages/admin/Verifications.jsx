@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import api from '../../api/axios';
 
-const BASE = 'http://localhost:5000';
+const BASE = import.meta.env.VITE_BACKEND_URL || '';
 
 const C = {
   navy:    '#0A0F2C',
