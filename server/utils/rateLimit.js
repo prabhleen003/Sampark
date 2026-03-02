@@ -38,15 +38,31 @@ export function checkCallerRateLimit(callerPhone, vehicleId) {
 }
 
 /**
- * Returns true if the vehicle has hit its daily call cap.
- * Registers the call attempt if not blocked.
+ * Returns limiter state for per-vehicle daily cap.
+ * - blocked: whether call should be rejected
+ * - shouldFlagForReview: true only on the first blocked attempt (16th call)
  */
 export function checkVehicleRateLimit(vehicleId) {
   const key = `${vehicleId}:${todayKey()}`;
   const count = vehicleMap.get(key) || 0;
 
-  if (count >= VEHICLE_LIMIT) return true;
+  if (count >= VEHICLE_LIMIT) {
+    const shouldFlagForReview = count === VEHICLE_LIMIT;
+    // Track blocked attempts so "first blocked" is emitted once.
+    vehicleMap.set(key, count + 1);
+    return {
+      blocked: true,
+      shouldFlagForReview,
+      count: count + 1,
+      limit: VEHICLE_LIMIT,
+    };
+  }
 
   vehicleMap.set(key, count + 1);
-  return false;
+  return {
+    blocked: false,
+    shouldFlagForReview: false,
+    count: count + 1,
+    limit: VEHICLE_LIMIT,
+  };
 }
