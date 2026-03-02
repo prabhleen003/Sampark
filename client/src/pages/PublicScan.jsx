@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
-const API_BASE = 'http://localhost:5000/api/v1';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/+$/, '');
 
 const C = {
   bg:            '#0A0F2C',
