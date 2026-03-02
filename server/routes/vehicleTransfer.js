@@ -250,7 +250,8 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     // Cancel any pending orders for this vehicle
     await Order.updateMany(
       { vehicle_id: vehicle._id, status: { $in: ['created', 'paid', 'processing'] } },
-      { $set: { status: 'cancelled' } }
+      { $set: { status: 'cancelled' } },
+      { runValidators: true }
     );
 
     // Soft-delete: set deactivated_at, clear QR and transfer fields

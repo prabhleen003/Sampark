@@ -282,7 +282,8 @@ router.delete('/me', async (req, res) => {
     // Cancel pending orders
     Order.updateMany(
       { user_id: userId, status: { $in: ['created', 'paid', 'processing'] } },
-      { status: 'cancelled' }
+      { $set: { status: 'cancelled' } },
+      { runValidators: true }
     ),
     // Anonymize call logs (keep for abuse tracking)
     CallLog.updateMany(

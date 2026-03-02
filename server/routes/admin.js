@@ -15,7 +15,8 @@ import {
 } from '../utils/analytics.js';
 
 const router = express.Router();
-const ORDER_STATUSES = ['paid', 'processing', 'shipped', 'delivered'];
+const ORDER_FILTER_STATUSES = ['paid', 'processing', 'shipped', 'delivered', 'cancelled'];
+const ORDER_UPDATE_STATUSES = ['paid', 'processing', 'shipped', 'delivered'];
 
 // ── Flagged Reviews ────────────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ router.get('/stats', async (req, res) => {
 // GET /api/v1/admin/orders?status=paid
 router.get('/orders', async (req, res) => {
   const filter = { status: { $nin: ['created'] } };
-  if (ORDER_STATUSES.includes(req.query.status)) {
+  if (ORDER_FILTER_STATUSES.includes(req.query.status)) {
     filter.status = req.query.status;
   }
   const orders = await Order.find(filter)
@@ -133,8 +134,8 @@ router.get('/orders', async (req, res) => {
 router.put('/orders/:id', async (req, res) => {
   const { status, tracking_id } = req.body;
 
-  if (!ORDER_STATUSES.includes(status)) {
-    return res.status(400).json({ success: false, message: `status must be one of: ${ORDER_STATUSES.join(', ')}` });
+  if (!ORDER_UPDATE_STATUSES.includes(status)) {
+    return res.status(400).json({ success: false, message: `status must be one of: ${ORDER_UPDATE_STATUSES.join(', ')}` });
   }
   if (status === 'shipped' && !tracking_id?.trim()) {
     return res.status(400).json({ success: false, message: 'tracking_id is required when status is shipped' });

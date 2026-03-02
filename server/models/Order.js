@@ -19,7 +19,7 @@ const orderSchema = new mongoose.Schema(
     mihpayid:  { type: String, default: null },                // PayU's payment ID
     status: {
       type: String,
-      enum: ['created', 'paid', 'processing', 'shipped', 'delivered'],
+      enum: ['created', 'paid', 'processing', 'shipped', 'delivered', 'cancelled'],
       default: 'created',
     },
     tracking_id: { type: String, default: null },
