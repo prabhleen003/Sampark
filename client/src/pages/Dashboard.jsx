@@ -856,6 +856,20 @@ function VehicleCard({ vehicle, payment, onViewQR, onViewActivity, onViewReceipt
         </div>
       )}
 
+      {/* Scan analytics — only shown for active QR */}
+      {active && (vehicle.total_scans > 0 || vehicle.scans_this_month > 0) && (
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+          <div style={{ flex: 1, backgroundColor: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.12)', borderRadius: '8px', padding: '8px 12px' }}>
+            <p style={{ color: C.teal, fontSize: '1rem', fontWeight: 700, margin: '0 0 1px', fontFamily: font.mono }}>{vehicle.total_scans ?? 0}</p>
+            <p style={{ color: C.textSecondary, fontSize: '0.7rem', margin: 0 }}>Total scans</p>
+          </div>
+          <div style={{ flex: 1, backgroundColor: 'rgba(0,229,160,0.04)', border: `1px solid ${C.border}`, borderRadius: '8px', padding: '8px 12px' }}>
+            <p style={{ color: C.textPrimary, fontSize: '1rem', fontWeight: 700, margin: '0 0 1px', fontFamily: font.mono }}>{vehicle.scans_this_month ?? 0}</p>
+            <p style={{ color: C.textSecondary, fontSize: '0.7rem', margin: 0 }}>This month</p>
+          </div>
+        </div>
+      )}
+
       {/* Transfer pending notice */}
       {isTransferPending && (
         <div style={{ backgroundColor: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.25)', borderRadius: '8px', padding: '12px', marginBottom: '14px' }}>

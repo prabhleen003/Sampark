@@ -573,14 +573,22 @@ export default function PublicScan() {
 
   const [state, setState]    = useState('loading');
   const [vehicle, setVehicle]  = useState(null);
+  const [info, setInfo]        = useState(null);   // enriched /info data
   const [templates, setTemplates] = useState([]);
   const [panel, setPanel]      = useState(null);
   const [errMsg, setErrMsg]    = useState('');
 
+  // Meta tags — title + noindex
   useEffect(() => {
     if (vehicle?.plate_number) document.title = `Sampaark — Contact ${vehicle.plate_number}`;
     else document.title = 'Sampaark — Contact Vehicle Owner';
-    return () => { document.title = 'Sampaark'; };
+
+    // noindex meta — prevent search engines indexing individual scan pages
+    let meta = document.querySelector('meta[name="robots"]');
+    if (!meta) { meta = document.createElement('meta'); meta.name = 'robots'; document.head.appendChild(meta); }
+    meta.content = 'noindex, nofollow';
+
+    return () => { document.title = 'Sampaark'; if (meta) meta.remove(); };
   }, [vehicle]);
 
   useEffect(() => {
@@ -593,16 +601,22 @@ export default function PublicScan() {
       .then(data => {
         if (!data.success) throw new Error(data.message || 'Invalid QR');
         setVehicle(data.vehicle);
-        if (data.deactivated)  { setState('deactivated');  return null; }
-        if (data.transferring) { setState('transferring'); return null; }
-        if (data.suspended)    { setState('suspended');    return null; }
-        if (data.expired)      { setState('expired');      return null; }
+        if (data.deactivated)  { setState('deactivated');  return [null, null]; }
+        if (data.transferring) { setState('transferring'); return [null, null]; }
+        if (data.suspended)    { setState('suspended');    return [null, null]; }
+        if (data.expired)      { setState('expired');      return [null, null]; }
         setState('ok');
-        return fetch(`${base}/templates?sig=${sp}`).then(r => r.json()).catch(() => null);
+        // Fetch templates + enriched info in parallel
+        return Promise.all([
+          fetch(`${base}/templates?sig=${sp}`).then(r => r.json()).catch(() => null),
+          fetch(`${base}/info?sig=${sp}`).then(r => r.json()).catch(() => null),
+        ]);
       })
-      .then(tplData => {
-        if (!tplData) return;
+      .then(results => {
+        if (!results) return;
+        const [tplData, infoData] = results;
         if (tplData?.success)  setTemplates(tplData.templates || []);
+        if (infoData?.success) setInfo(infoData.info || null);
       })
       .catch(err => { setState('error'); setErrMsg(err.message || 'Invalid or expired QR code.'); });
   }, [vehicleId, sig]);
@@ -674,6 +688,10 @@ export default function PublicScan() {
   // ── Main scan UI ──────────────────────────────────────────────────────────
   const isSilent      = vehicle?.comm_mode === 'silent';
   const isMessageOnly = vehicle?.comm_mode === 'message_only';
+  const hasEmergencyContacts = info?.has_emergency_contacts ?? false;
+  const isDigiLocker  = info?.is_digilocker_verified;
+  const cardCode      = info?.card_code;
+  const responseRate  = info?.owner_response_rate;
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: C.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 1rem 1rem' }}>
@@ -685,14 +703,43 @@ export default function PublicScan() {
           Sampaark — Secure Contact
         </p>
 
-        {/* Plate number */}
-        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', padding: '12px 28px', borderRadius: '14px', border: '2px solid rgba(0,229,160,0.18)', backgroundColor: 'rgba(0,229,160,0.06)', marginBottom: '10px' }}>
+        {/* Plate number + badge */}
+        <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', padding: '12px 28px', borderRadius: '14px', border: '2px solid rgba(0,229,160,0.18)', backgroundColor: 'rgba(0,229,160,0.06)', marginBottom: '8px' }}>
             <span style={{ fontFamily: C.mono, fontSize: '2rem', fontWeight: 700, color: C.textPrimary, letterSpacing: '0.08em' }}>
               {vehicle.plate_number}
             </span>
           </div>
+          {/* Verification badge */}
+          {isDigiLocker ? (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: 'rgba(103,183,255,0.1)', border: '1px solid rgba(103,183,255,0.28)', borderRadius: '6px', padding: '3px 10px', fontSize: '0.73rem', fontWeight: 700, color: '#67B7FF' }}>
+              🛡️ DigiLocker Verified
+            </div>
+          ) : (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: 'rgba(0,229,160,0.08)', border: '1px solid rgba(0,229,160,0.2)', borderRadius: '6px', padding: '3px 10px', fontSize: '0.73rem', fontWeight: 600, color: C.teal }}>
+              ✓ Verified
+            </div>
+          )}
+          {/* Card code */}
+          {cardCode && (
+            <p style={{ color: C.textSecondary, fontSize: '0.72rem', margin: '6px 0 0' }}>
+              Code: <span style={{ fontFamily: C.mono, color: C.textPrimary }}>{cardCode}</span>
+            </p>
+          )}
         </div>
+
+        {/* Trust section — only if ≥5 calls and rate ≥50% */}
+        {responseRate !== null && responseRate !== undefined && responseRate >= 50 && (
+          <div style={{ backgroundColor: 'rgba(0,229,160,0.05)', border: `1px solid rgba(0,229,160,0.14)`, borderRadius: '10px', padding: '10px 14px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <p style={{ color: C.textSecondary, fontSize: '0.75rem', margin: 0 }}>Owner typically responds</p>
+              <p style={{ color: responseRate >= 80 ? C.teal : '#FB923C', fontSize: '0.78rem', fontWeight: 700, margin: 0 }}>{responseRate}%</p>
+            </div>
+            <div style={{ height: '4px', borderRadius: '2px', backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${responseRate}%`, borderRadius: '2px', backgroundColor: responseRate >= 80 ? C.teal : '#FB923C' }} />
+            </div>
+          </div>
+        )}
 
         {/* Privacy notice */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${C.border}`, backgroundColor: 'rgba(255,255,255,0.02)', marginBottom: '20px' }}>
@@ -735,6 +782,11 @@ export default function PublicScan() {
 
         {/* Bottom section */}
         <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {cardCode && (
+            <p style={{ color: C.textSecondary, fontSize: '0.75rem', margin: 0 }}>
+              Can't scan? Text <span style={{ fontFamily: C.mono, color: C.textPrimary }}>{cardCode}</span> to reach the owner
+            </p>
+          )}
           <button onClick={() => setPanel('report')} style={{ border: 'none', background: 'none', color: C.textSecondary, fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline', padding: '4px 0' }}>
             Report an issue
           </button>
@@ -745,7 +797,7 @@ export default function PublicScan() {
 
       {panel === 'call'      && <CallPanel      vehicleId={vehicleId} sig={sig} onClose={() => setPanel(null)} />}
       {panel === 'message'   && <MessagePanel   vehicleId={vehicleId} sig={sig} templates={templates} onClose={() => setPanel(null)} />}
-      {panel === 'emergency' && <EmergencyPanel vehicleId={vehicleId} sig={sig} onClose={() => setPanel(null)} />}
+      {panel === 'emergency' && <EmergencyPanel vehicleId={vehicleId} sig={sig} hasEmergencyContacts={hasEmergencyContacts} onClose={() => setPanel(null)} />}
       {panel === 'report'    && <ReportPanel    vehicleId={vehicleId} onClose={() => setPanel(null)} />}
     </div>
   );

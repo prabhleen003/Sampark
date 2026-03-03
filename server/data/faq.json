@@ -1,0 +1,71 @@
+{
+  "categories": [
+    {
+      "name": "Getting Started",
+      "icon": "🚀",
+      "questions": [
+        { "id": "gs-1", "question": "How does Sampaark protect my phone number?", "answer": "When someone scans your QR code, they can call or message you through our masked communication system. Neither party ever sees the other's real phone number. All calls and messages are routed through a virtual number." },
+        { "id": "gs-2", "question": "How do I get my Sampaark QR code?", "answer": "Sign up with your phone number, register your vehicle with your driving licence, RC, and a plate photo. After automatic verification and payment of INR 499, your unique QR code is generated instantly. Download and print it for your dashboard." },
+        { "id": "gs-3", "question": "Can I register more than one vehicle?", "answer": "Yes, up to 2 vehicles per account. Each vehicle gets its own unique QR code with independent communication settings." },
+        { "id": "gs-4", "question": "Does the scanner need to install any app?", "answer": "No. They just scan the QR with any camera app or QR scanner. It opens a web page in their browser where they can call, message, or trigger an emergency alert without installing anything or creating an account." }
+      ]
+    },
+    {
+      "name": "QR Code",
+      "icon": "📱",
+      "questions": [
+        { "id": "qr-1", "question": "How long is my QR code valid?", "answer": "1 year from the date of payment. You will receive a reminder 30 days before expiry. After expiry, renew from your dashboard for another year." },
+        { "id": "qr-2", "question": "What if my QR sticker gets damaged?", "answer": "Download and reprint your QR anytime from the dashboard. The QR content stays the same as long as your subscription is active." },
+        { "id": "qr-3", "question": "What if someone copies my QR code?", "answer": "Your QR is cryptographically signed. Even if copied, it still routes to your masked number. If you suspect misuse, contact support to regenerate your QR, which invalidates the old one." },
+        { "id": "qr-4", "question": "What is the card code shown on my QR card?", "answer": "The card code is an 8-character backup code. If someone cannot scan the QR, they can use this code to look up your vehicle and contact you." }
+      ]
+    },
+    {
+      "name": "Calling & Messaging",
+      "icon": "📞",
+      "questions": [
+        { "id": "cs-1", "question": "What is masked calling?", "answer": "Masked calling connects two people through a virtual phone number. When someone calls you through Sampaark, both parties see only the virtual number, never each other's real numbers." },
+        { "id": "cs-2", "question": "Can I control who can contact me?", "answer": "Yes. Set your communication mode from the dashboard. 'All' allows calls and messages. 'Message Only' disables calls. 'Silent' blocks everything except emergency alerts." },
+        { "id": "cs-3", "question": "What happens if I miss a call?", "answer": "The caller is automatically offered the option to send you a message instead. You will receive the message and see it in your dashboard activity feed." },
+        { "id": "cs-4", "question": "Can someone spam me with calls or messages?", "answer": "Our rate limiting system caps calls per caller per vehicle per hour, and vehicles have a daily cap. Repeated abuse can be reported and will result in the caller being blocklisted." }
+      ]
+    },
+    {
+      "name": "Emergency",
+      "icon": "🚨",
+      "questions": [
+        { "id": "em-1", "question": "How does emergency routing work?", "answer": "When someone taps Emergency, the system calls you first. If you do not answer, it automatically calls your emergency contacts in priority order. If nobody answers, the caller is informed to contact emergency services." },
+        { "id": "em-2", "question": "Can emergency calls bypass Silent Mode?", "answer": "Yes. Emergency calls always go through regardless of your communication mode setting. This ensures reachability in genuine emergencies." },
+        { "id": "em-3", "question": "How many emergency contacts can I add?", "answer": "Up to 3 emergency contacts per vehicle. Add them from the Emergency Contacts section in your vehicle settings on the dashboard." }
+      ]
+    },
+    {
+      "name": "Payment",
+      "icon": "💳",
+      "questions": [
+        { "id": "pm-1", "question": "How much does Sampaark cost?", "answer": "QR subscription costs INR 499 per year per vehicle. Physical card delivery is available at INR 99 (standard, 7–10 days) or INR 199 (express, 3–5 days)." },
+        { "id": "pm-2", "question": "What happens when my subscription expires?", "answer": "Your QR stops working. Anyone scanning it sees an expiry notice. Renew anytime from your dashboard — a new QR is generated on renewal." },
+        { "id": "pm-3", "question": "Can I get a refund?", "answer": "If your QR has zero scans and you request a refund within 7 days of payment, contact support and we will review it on a case-by-case basis." },
+        { "id": "pm-4", "question": "What payment methods do you accept?", "answer": "We accept all major payment methods through PayU: credit cards, debit cards, UPI, net banking, and wallets." }
+      ]
+    },
+    {
+      "name": "Privacy & Security",
+      "icon": "🔒",
+      "questions": [
+        { "id": "ps-1", "question": "What data does Sampaark store?", "answer": "Your encrypted phone number, name, vehicle documents (for verification only), and communication logs. Phone numbers are encrypted with AES-256 and never exposed publicly. Download your data or delete your account anytime from Settings." },
+        { "id": "ps-2", "question": "Can someone find my real phone number through Sampaark?", "answer": "No. Your real number is never exposed to callers, message senders, or on the public scan page. All communication happens through masked virtual numbers." },
+        { "id": "ps-3", "question": "Can I delete my account?", "answer": "Yes. Go to Settings → Privacy and Data → Delete Account. This permanently deactivates all QR codes, removes personal data, and anonymises communication history." },
+        { "id": "ps-4", "question": "What if someone is harassing me through Sampaark?", "answer": "Tap the flag icon next to any call or message in your activity feed to report abuse. Our system tracks repeat offenders and can block them from contacting you or any vehicle on the platform." }
+      ]
+    },
+    {
+      "name": "Vehicle Transfer",
+      "icon": "🔄",
+      "questions": [
+        { "id": "vt-1", "question": "How do I transfer my vehicle to a new owner?", "answer": "Go to vehicle settings on the dashboard and tap 'Transfer Vehicle'. You get an 8-character transfer code valid for 48 hours. The new owner enters this code in their Sampaark account to claim the vehicle. Your QR is deactivated during transfer." },
+        { "id": "vt-2", "question": "What happens to my QR after transfer?", "answer": "Your QR is permanently deactivated. The new owner must complete their own verification and payment to get a new QR with a new URL." }
+      ]
+    }
+  ]
+}

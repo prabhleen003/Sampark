@@ -27,6 +27,9 @@ const PREF_MAP = {
   abuse_report_filed:       null,
   abuse_report_resolved:    null,
   auto_suspension:          null,
+  support_ticket_created:   null,
+  support_reply:            null,
+  support_status_update:    null,
 };
 
 /**

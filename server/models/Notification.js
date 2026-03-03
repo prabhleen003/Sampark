@@ -34,6 +34,10 @@ const NOTIF_TYPES = [
   'transfer_initiated',
   'vehicle_transferred_out',
   'vehicle_transferred_in',
+  // Support
+  'support_ticket_created',
+  'support_reply',
+  'support_status_update',
 ];
 
 const notificationSchema = new mongoose.Schema(

@@ -15,6 +15,7 @@ import paymentRoutes from './routes/payments.js';
 import orderRoutes from './routes/orders.js';
 import notificationRoutes from './routes/notifications.js';
 import settingsRoutes from './routes/settings.js';
+import supportRoutes from './routes/support.js';
 import authMiddleware from './middleware/auth.js';
 import adminMiddleware from './middleware/adminAuth.js';
 import CallLog from './models/CallLog.js';
@@ -57,6 +58,7 @@ app.use('/api/v1/call-logs', authMiddleware, callLogRoutes);
 app.use('/api/v1/payments', authMiddleware, paymentRoutes);
 app.use('/api/v1/orders',        authMiddleware, orderRoutes);
 app.use('/api/v1/notifications', authMiddleware, notificationRoutes);
+app.use('/api/v1/support', supportRoutes);          // /faq is public; auth enforced per-route
 
 // Exotel webhook — no auth, Exotel posts here when call status updates
 app.post('/api/v1/webhooks/exotel', express.urlencoded({ extended: false }), async (req, res) => {

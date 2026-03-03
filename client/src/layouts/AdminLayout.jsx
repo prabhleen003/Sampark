@@ -46,10 +46,12 @@ export default function AdminLayout() {
   }
 
   const navItems = [
-    { to: '/admin/verifications', label: 'Flagged Reviews', icon: '🔍' },
-    { to: '/admin/orders',        label: 'Orders',          icon: '📦' },
-    { to: '/admin/abuse-reports', label: 'Abuse Reports',   icon: '🚨' },
-    { to: '/admin/blocklist',     label: 'Blocklist',       icon: '🛡️' },
+    { to: '/admin/verifications',  label: 'Flagged Reviews', icon: '🔍' },
+    { to: '/admin/orders',         label: 'Orders',          icon: '📦' },
+    { to: '/admin/abuse-reports',  label: 'Abuse Reports',   icon: '🚨' },
+    { to: '/admin/blocklist',      label: 'Blocklist',       icon: '🛡️' },
+    { to: '/admin/public-reports', label: 'Public Reports',  icon: '🚩' },
+    { to: '/admin/support',        label: 'Support',         icon: '🎫' },
   ];
 
   const linkStyle = (isActive) => ({

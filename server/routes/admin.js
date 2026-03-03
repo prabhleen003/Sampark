@@ -5,7 +5,8 @@ import Order        from '../models/Order.js';
 import AbuseReport  from '../models/AbuseReport.js';
 import CallLog      from '../models/CallLog.js';
 import Blocklist    from '../models/Blocklist.js';
-import PublicReport from '../models/PublicReport.js';
+import PublicReport   from '../models/PublicReport.js';
+import SupportTicket from '../models/SupportTicket.js';
 import { createNotification } from '../services/notification.js';
 import { getCallerProfile }   from '../utils/callerProfile.js';
 import {
@@ -568,6 +569,180 @@ router.put('/public-reports/:id', async (req, res) => {
   });
 
   res.json({ success: true, report, vehicle: { plate_number: vehicle.plate_number, needs_manual_review: true } });
+});
+
+// ── Admin Support Routes ───────────────────────────────────────────────────────
+
+const PRIORITY_WEIGHT = { critical: 0, high: 1, medium: 2, low: 3 };
+
+// GET /api/v1/admin/support/stats
+router.get('/support/stats', async (req, res) => {
+  const openTickets = await SupportTicket.countDocuments({ status: { $in: ['open', 'in_progress', 'awaiting_user'] } });
+
+  const allTickets = await SupportTicket.find({});
+  let totalFirstResponse = 0, firstResponseCount = 0;
+  let totalResolution = 0;
+  const resolvedTickets = [];
+
+  allTickets.forEach(t => {
+    const firstAdmin = t.messages.find(m => m.sender === 'admin');
+    if (firstAdmin && t.messages[0]) {
+      totalFirstResponse += new Date(firstAdmin.created_at) - new Date(t.messages[0].created_at);
+      firstResponseCount++;
+    }
+    if (t.resolved_at) { totalResolution += new Date(t.resolved_at) - new Date(t.created_at); resolvedTickets.push(t); }
+  });
+
+  const [byCategory, satisfaction] = await Promise.all([
+    SupportTicket.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+    SupportTicket.aggregate([{ $match: { satisfaction_rating: { $ne: null } } }, { $group: { _id: null, avg: { $avg: '$satisfaction_rating' }, count: { $sum: 1 } } }]),
+  ]);
+
+  res.json({
+    success: true,
+    open_tickets: openTickets,
+    avg_first_response_hours: firstResponseCount > 0 ? Math.round((totalFirstResponse / firstResponseCount) / 3600000 * 10) / 10 : 0,
+    avg_resolution_hours: resolvedTickets.length > 0 ? Math.round((totalResolution / resolvedTickets.length) / 3600000 * 10) / 10 : 0,
+    by_category: byCategory,
+    satisfaction_avg: satisfaction[0]?.avg ? Math.round(satisfaction[0].avg * 10) / 10 : null,
+    satisfaction_count: satisfaction[0]?.count || 0,
+  });
+});
+
+// GET /api/v1/admin/support
+router.get('/support', async (req, res) => {
+  const { status, priority, category, page = 1, limit = 20 } = req.query;
+  const filter = {};
+  if (status) filter.status = status;
+  else filter.status = { $in: ['open', 'in_progress'] };
+  if (priority) filter.priority = priority;
+  if (category) filter.category = category;
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [tickets, total] = await Promise.all([
+    SupportTicket.find(filter).populate('user_id', 'name').populate('vehicle_id', 'plate_number status').sort({ updated_at: -1 }).skip(skip).limit(Number(limit)),
+    SupportTicket.countDocuments(filter),
+  ]);
+
+  const enriched = tickets.map(t => {
+    const last = t.messages[t.messages.length - 1];
+    const needsResponse = last?.sender === 'user';
+    let timeSinceUser = null;
+    for (let i = t.messages.length - 1; i >= 0; i--) {
+      if (t.messages[i].sender === 'user') { timeSinceUser = Date.now() - new Date(t.messages[i].created_at); break; }
+    }
+    return {
+      ...t.toObject(),
+      message_count: t.messages.length,
+      needs_response: needsResponse,
+      time_since_user_message: timeSinceUser,
+      last_message: last ? { text: last.text.slice(0, 100), sender: last.sender, created_at: last.created_at } : null,
+    };
+  });
+
+  enriched.sort((a, b) => {
+    const wa = PRIORITY_WEIGHT[a.priority] ?? 2, wb = PRIORITY_WEIGHT[b.priority] ?? 2;
+    if (wa !== wb) return wa - wb;
+    if (a.needs_response && !b.needs_response) return -1;
+    if (!a.needs_response && b.needs_response) return 1;
+    return new Date(b.updated_at) - new Date(a.updated_at);
+  });
+
+  res.json({ success: true, tickets: enriched, total, page: Number(page), total_pages: Math.ceil(total / Number(limit)) });
+});
+
+// GET /api/v1/admin/support/:ticketId
+router.get('/support/:ticketId', async (req, res) => {
+  const ticket = await SupportTicket.findById(req.params.ticketId)
+    .populate('user_id', 'name created_at')
+    .populate('vehicle_id', 'plate_number status qr_valid_until');
+  if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
+
+  const userId = ticket.user_id._id;
+  const [vehicleCount, previousTickets] = await Promise.all([
+    Vehicle.countDocuments({ user_id: userId }),
+    SupportTicket.countDocuments({ user_id: userId, _id: { $ne: ticket._id } }),
+  ]);
+
+  res.json({
+    success: true,
+    ticket,
+    user_context: {
+      name: ticket.user_id.name,
+      account_age_days: Math.floor((Date.now() - new Date(ticket.user_id.created_at)) / 86400000),
+      vehicle_count: vehicleCount,
+      previous_tickets: previousTickets,
+    },
+  });
+});
+
+// POST /api/v1/admin/support/:ticketId/message
+router.post('/support/:ticketId/message', async (req, res) => {
+  const { text, set_awaiting } = req.body;
+  if (!text?.trim() || text.trim().length > 2000) return res.status(400).json({ success: false, message: 'Message required, max 2000 characters' });
+
+  const ticket = await SupportTicket.findById(req.params.ticketId);
+  if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
+  if (ticket.status === 'closed') return res.status(400).json({ success: false, message: 'Cannot reply to a closed ticket' });
+
+  ticket.messages.push({ sender: 'admin', sender_id: req.user?.userId || null, sender_name: 'Sampaark Support', text: text.trim() });
+  if (set_awaiting) ticket.status = 'awaiting_user';
+  else if (ticket.status === 'open') ticket.status = 'in_progress';
+  ticket.updated_at = new Date();
+  await ticket.save();
+
+  createNotification(
+    ticket.user_id, 'support_reply',
+    `New Reply on Ticket ${ticket.ticket_number}`,
+    `Sampaark Support replied: "${text.trim().slice(0, 80)}${text.trim().length > 80 ? '…' : ''}"`,
+    null, '/support/tickets',
+    { ticket_id: ticket._id.toString() }
+  );
+
+  res.json({ success: true, ticket });
+});
+
+// PUT /api/v1/admin/support/:ticketId/status
+router.put('/support/:ticketId/status', async (req, res) => {
+  const { status, notes } = req.body;
+  const VALID = ['open', 'in_progress', 'awaiting_user', 'resolved', 'closed'];
+  if (!VALID.includes(status)) return res.status(400).json({ success: false, message: 'Invalid status' });
+
+  const ticket = await SupportTicket.findById(req.params.ticketId);
+  if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
+
+  const oldStatus = ticket.status;
+  ticket.status = status;
+  if (status === 'resolved') ticket.resolved_at = new Date();
+  if (status === 'closed')   ticket.closed_at   = new Date();
+
+  const noteText = notes?.trim() ? ` Note: ${notes.trim()}` : '';
+  ticket.messages.push({ sender: 'system', sender_id: null, sender_name: 'System', text: `Ticket status changed from ${oldStatus} to ${status}.${noteText}` });
+  ticket.updated_at = new Date();
+  await ticket.save();
+
+  const statusLabels = { resolved: 'Your support ticket has been resolved.', closed: 'Your support ticket has been closed.', in_progress: 'Your support ticket is being worked on.', awaiting_user: 'Your support ticket needs your response.' };
+  if (statusLabels[status]) {
+    createNotification(ticket.user_id, 'support_status_update', `Ticket ${ticket.ticket_number} Updated`, statusLabels[status], null, '/support/tickets', { ticket_id: ticket._id.toString() });
+  }
+
+  res.json({ success: true, ticket });
+});
+
+// PUT /api/v1/admin/support/:ticketId/priority
+router.put('/support/:ticketId/priority', async (req, res) => {
+  const { priority } = req.body;
+  if (!['low', 'medium', 'high', 'critical'].includes(priority)) return res.status(400).json({ success: false, message: 'Invalid priority' });
+
+  const ticket = await SupportTicket.findById(req.params.ticketId);
+  if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
+
+  const old = ticket.priority;
+  ticket.priority = priority;
+  ticket.messages.push({ sender: 'system', sender_id: null, sender_name: 'System', text: `Priority changed from ${old} to ${priority}.` });
+  ticket.updated_at = new Date();
+  await ticket.save();
+  res.json({ success: true, ticket });
 });
 
 export default router;
