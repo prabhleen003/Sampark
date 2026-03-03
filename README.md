@@ -37,6 +37,19 @@ Your phone number is **never exposed**. It's encrypted at rest and never sent to
 
 ---
 
+## Latest Update (March 3, 2026)
+
+This release adds a complete help and support workflow:
+
+- Public Help Center page at `/help`
+- Public FAQ API at `/api/v1/support/faq`
+- User support tickets at `/support/tickets` with conversation threads
+- Backend support routes under `/api/v1/support`
+- Admin support inbox and ticket actions under `/api/v1/admin/support`
+- Admin public report moderation under `/api/v1/admin/public-reports`
+
+---
+
 ## Feature Highlights
 
 | Feature | Description |
@@ -50,6 +63,9 @@ Your phone number is **never exposed**. It's encrypted at rest and never sent to
 | **Privacy score** | Computed metric tracking how well each user protects their data |
 | **Data export** | Full GDPR-style account export as JSON |
 | **Admin panel** | Document verification, abuse management, suspension controls |
+| **Help center + FAQ** | Public self-serve help page with backend FAQ feed |
+| **Support tickets** | User ticket creation, threaded replies, close/reopen, satisfaction rating |
+| **Admin support desk** | Queue filtering by status/priority/category with SLA-style stats |
 
 ---
 
@@ -410,6 +426,18 @@ sampark/
 | GET | `/:vehicleId/emergency/:sessionId` | sig | Poll emergency session status |
 | GET | `/sms-lookup` | — | Look up vehicle by plate for SMS flow |
 
+### Support — `/api/v1/support`
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/faq` | — | Public FAQ list |
+| POST | `/` | JWT | Create support ticket |
+| GET | `/` | JWT | List current user tickets |
+| GET | `/:ticketId` | JWT | Get one ticket with message thread |
+| POST | `/:ticketId/message` | JWT | Add user reply to ticket |
+| PUT | `/:ticketId/close` | JWT | Close ticket with optional rating |
+| POST | `/:ticketId/reopen` | JWT | Reopen closed ticket (within 7 days) |
+
 ### Payments — `/api/v1/payments`
 
 | Method | Endpoint | Auth | Description |
@@ -431,6 +459,14 @@ sampark/
 | DELETE | `/blocklist/:id` | admin JWT | Remove from blocklist |
 | GET | `/suspended` | admin JWT | List suspended vehicles |
 | POST | `/suspended/:id/unsuspend` | admin JWT | Lift suspension |
+| GET | `/public-reports` | admin JWT | List public reports filed from scan page |
+| PUT | `/public-reports/:id` | admin JWT | Dismiss or mark for investigation |
+| GET | `/support/stats` | admin JWT | Ticket volume, response and resolution metrics |
+| GET | `/support` | admin JWT | Filtered support queue (status/priority/category) |
+| GET | `/support/:ticketId` | admin JWT | Ticket detail with user context |
+| POST | `/support/:ticketId/message` | admin JWT | Reply to ticket and set awaiting user |
+| PUT | `/support/:ticketId/status` | admin JWT | Update ticket status |
+| PUT | `/support/:ticketId/priority` | admin JWT | Update ticket priority |
 
 ---
 
