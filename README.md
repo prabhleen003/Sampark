@@ -1,633 +1,560 @@
 <div align="center">
 
-# Sampark — Privacy-First Vehicle Identity Platform (Ongoing Project)
+# 🛡️ SAMPAARK
 
-**Connect with your vehicle without exposing your phone number**
+### Privacy-First Vehicle Identity & Emergency Communication Platform
 
-[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev)
-[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb&logoColor=white)](https://mongodb.com/atlas)
-[![Express](https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white)](https://expressjs.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![React](https://img.shields.io/badge/React-18+-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-7.0+-47A248?style=for-the-badge&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![Exotel](https://img.shields.io/badge/Exotel-Telecom_API-FF6B35?style=for-the-badge)](https://exotel.com/)
+[![PayU](https://img.shields.io/badge/PayU-Payments-00C853?style=for-the-badge)](https://payu.in/)
 
-> **Sampark** (संपर्क) means *contact* in Hindi — exactly what this platform enables, privately.
+**Replace your dashboard phone number with a cryptographically signed QR code.**
+Anyone scans it → Calls, SMS, or Emergency — without ever seeing your real number.
+
+[🚀 Getting Started](#-getting-started) · [📐 Architecture](#-system-architecture) · [🔄 User Flows](#-user-flows) · [🛠️ API Reference](#%EF%B8%8F-api-reference)
 
 </div>
 
 ---
 
-## The Problem
+## 🚨 The Problem
 
-Every day, vehicle owners face situations where a stranger needs to reach them — a blocking car, lights left on, a tow truck approaching. The traditional solution? Paste your phone number on the dashboard.
+170 million vehicles in India display owner phone numbers on their dashboards — creating vectors for spam, stalking, harassment, and social engineering. But removing the number means nobody can reach you in a parking emergency.
 
-**This is a privacy nightmare.** A number on your windshield is visible to anyone: stalkers, scammers, or anyone with bad intent. Yet, not displaying it means genuine emergencies go unhandled.
-
----
-
-## The Solution
-
-Sampark replaces the phone number sticker with a **QR code on your vehicle**.
-
-When someone scans it, they can:
-- Send a pre-set message ("Your car is blocking mine")
-- Request a **masked call** — they talk to you, neither party sees the other's number
-- Trigger a **full emergency chain** if you're unreachable — contacts are called in priority order, automatically
-
-Your phone number is **never exposed**. It's encrypted at rest and never sent to the scanner's device.
+**The paradox:** You *need* to be reachable for your parked vehicle, but displaying your number makes you vulnerable.
 
 ---
 
-## Latest Update (March 3, 2026)
+## 💡 The Solution
 
-This release adds a complete help and support workflow:
+Sampaark replaces your dashboard number with a QR code enabling masked communication — neither party ever sees the other's real phone number.
 
-- Public Help Center page at `/help`
-- Public FAQ API at `/api/v1/support/faq`
-- User support tickets at `/support/tickets` with conversation threads
-- Backend support routes under `/api/v1/support`
-- Admin support inbox and ticket actions under `/api/v1/admin/support`
-- Admin public report moderation under `/api/v1/admin/public-reports`
+**How it works:** Sign up → verify vehicle docs → pay ₹499/year → get a signed QR for your dashboard. Anyone scans it with any camera — no app needed — and can Call, SMS, or raise an Emergency, all masked.
 
 ---
 
-## Feature Highlights
+## ✨ Key Features
 
-| Feature | Description |
-|---|---|
-| **QR-based identity** | Unique signed QR per vehicle; invalidated instantly on transfer or suspension |
-| **Masked calling** | Bridged calls via Exotel — scanner and owner never see each other's number |
-| **Emergency chain** | Auto-escalates through 3 emergency contacts if owner doesn't pick up |
-| **Pre-set messages** | 5 common situations; custom text option available |
-| **Abuse controls** | Blocklist per-vehicle or global; auto-suspension after repeated reports |
-| **Vehicle transfer** | Secure 8-char code with 48-hour expiry; QR invalidated during transfer |
-| **Privacy score** | Computed metric tracking how well each user protects their data |
-| **Data export** | Full GDPR-style account export as JSON |
-| **Admin panel** | Document verification, abuse management, suspension controls |
-| **Help center + FAQ** | Public self-serve help page with backend FAQ feed |
-| **Support tickets** | User ticket creation, threaded replies, close/reopen, satisfaction rating |
-| **Admin support desk** | Queue filtering by status/priority/category with SLA-style stats |
+| For Vehicle Owners | For QR Scanners | For Admins |
+|---|---|---|
+| 🔒 Masked calls & SMS via Exotel | 📱 No app required — any browser | 📈 Analytics with Recharts |
+| 🚨 Emergency call chain (owner → EC1 → EC2 → EC3 → SMS) | 📞 One-tap masked call | 🚩 Abuse management + auto-moderation |
+| 🎛️ Comm modes: All / Message Only / Silent | 💬 Pre-written SMS templates | 🎫 Full support ticketing |
+| 📊 Activity dashboard with caller hashes | 🚨 Emergency bypasses all blocks | 📦 Order pipeline management |
+| 🛡️ Privacy score 0–100 | 🔁 Call-to-SMS fallback | — |
+| 🔄 Secure vehicle transfer (48h code) | — | — |
 
 ---
 
-## Architecture Overview
+## 📐 System Architecture
 
 ```mermaid
-graph TD
-    subgraph Client["Client — React 18 + Vite"]
-        Landing["Landing"]
-        Login["Login"]
-        Dashboard["Dashboard"]
-        PublicScan["PublicScan"]
-        Register["RegisterVehicle"]
-        Claim["ClaimVehicle"]
-        Settings["Settings"]
-        Admin["Admin Panel"]
+graph TB
+    subgraph Users["👤 Users"]
+        A[Vehicle Owner]
+        B[QR Scanner]
+        C[Admin]
     end
 
-    subgraph Server["Server — Express.js"]
-        Auth["/auth\nOTP · JWT"]
-        Users["/users\nSettings · Privacy\nExport · Score"]
-        Vehicles["/vehicles\nCRUD · QR\nTransfer · CallLogs\nPayments · Orders"]
-        Public["/v/:id\nMessage · Call\nEmergency"]
-        AdminRoutes["/admin\nVerification\nAbuse · Blocklist\nSuspension"]
+    subgraph Frontend["🌐 Frontend — React + Vite"]
+        D[Auth / Dashboard / Settings]
+        E[Public Scan Page]
+        F[Admin Panel]
     end
 
-    subgraph Data["Persistence"]
-        MongoDB[("MongoDB Atlas\nMumbai")]
+    subgraph Backend["⚙️ Backend — Node.js + Express"]
+        G[Auth Routes]
+        H[Vehicle Routes]
+        I[Public Routes]
+        J[Payment Routes]
+        K[Admin Routes]
     end
 
-    subgraph External["External APIs"]
-        Exotel["Exotel\nMasked Calls"]
-        PayU["PayU\nPayments"]
-        DigiLocker["DigiLocker\nKYC"]
+    subgraph Services["🔌 Services"]
+        L[Exotel — Masked Calls & SMS]
+        M[Emergency Chain]
+        N[Auto-Verification]
+        O[Notification Service]
+        P[Auto-Moderation]
     end
 
-    Client -- "REST /api/v1\nVite proxy in dev" --> Server
-    Server --> MongoDB
-    Vehicles --> Exotel
-    Vehicles --> PayU
-    Vehicles --> DigiLocker
-    Public --> Exotel
+    subgraph Data["💾 Data Layer"]
+        Q[(MongoDB Atlas)]
+        R[(Redis — OTP & Rate Limits)]
+    end
+
+    subgraph External["🔗 External APIs"]
+        S[Exotel]
+        T[PayU]
+        U[DigiLocker]
+    end
+
+    A --> D
+    B --> E
+    C --> F
+    D --> G & H & J
+    E --> I
+    F --> K
+    G & H & I & J & K --> Q & R
+    I --> L & M & P
+    H --> N
+    N --> U
+    L --> S
+    J --> T
+    M --> L
+    O --> Q
 ```
 
----
-
-## Data Flow Diagrams
-
-### Authentication Flow
+### QR Scan → Masked Call: Request Flow
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Client
-    participant Server
-    participant DB
+    participant Scanner as 📱 Scanner
+    participant Frontend as ⚛️ React App
+    participant Backend as ⚙️ Express API
+    participant DB as 💾 MongoDB
+    participant Exotel as 📞 Exotel
+    participant Owner as 📱 Owner
 
-    User->>Client: Enter phone number
-    Client->>Server: POST /auth/send-otp { phone }
-    Server->>Server: hashPhone(phone) → SHA-256
-    Server->>DB: Check existing user by phone_hash
-    Server-->>Client: { otp } (dev mode) / SMS (prod)
-    User->>Client: Enter OTP
-    Client->>Server: POST /auth/verify-otp { phone, otp }
-    Server->>Server: verifyOtp(key, otp)
-    Server->>DB: Upsert user (phone_hash + phone_encrypted)
-    Server-->>Client: { token: JWT, profile_complete }
-    Client->>Client: Store JWT, redirect to /setup or /dashboard
-```
+    Scanner->>Frontend: Scans QR → opens /v/{id}?sig={hmac}
+    Frontend->>Backend: GET /v/{id}?sig={hmac}
+    Backend->>Backend: Verify HMAC-SHA256 signature
+    Backend->>DB: Find vehicle, check status & expiry
+    DB-->>Backend: plate_number, comm_mode, active
+    Backend-->>Frontend: Plate + available actions
+    Frontend-->>Scanner: Call / SMS / Emergency buttons
 
----
+    Scanner->>Frontend: Taps "Call", enters phone
+    Frontend->>Backend: POST /v/{id}/call
+    Backend->>DB: Check blocklist + rate limits
+    Backend->>Exotel: initiateCall(caller, owner_virtual)
+    Exotel->>Scanner: Rings scanner
+    Exotel->>Owner: Rings owner (virtual number shown)
 
-### QR Scan & Contact Flow
-
-```mermaid
-sequenceDiagram
-    participant Scanner
-    participant PublicPage
-    participant API
-    participant DB
-    participant Exotel
-
-    Scanner->>PublicPage: Open /v/:vehicleId?sig=<token>
-    PublicPage->>API: GET /v/:vehicleId?sig=
-    API->>DB: findById + timingSafeEqual(qr_token, sig)
-    DB-->>API: vehicle { plate_number, status, comm_mode }
-    API-->>PublicPage: { plate_number, templates }
-
-    alt Send Message
-        Scanner->>PublicPage: Select template / type message
-        PublicPage->>API: POST /v/:vehicleId/message { sender_phone, text }
-        API->>API: isCallerBlocked(hashPhone(sender_phone), vehicleId)
-        API->>DB: Save CallLog { type: 'message' }
-        API-->>PublicPage: { success: true }
-    end
-
-    alt Request Call
-        Scanner->>PublicPage: Tap "Call Owner"
-        PublicPage->>API: POST /v/:vehicleId/call { caller_phone }
-        API->>API: checkCallerRateLimit + checkVehicleRateLimit
-        API->>Exotel: initiateCall(callerPhone, ownerPhone)
-        API-->>PublicPage: { call_id, status: 'connecting' }
+    alt Owner Answers
+        Exotel-->>Backend: status=completed
+    else No Answer
+        Exotel-->>Backend: status=no-answer
+        Backend-->>Frontend: fallback_token
+        Frontend-->>Scanner: "Owner didn't answer. Send SMS?"
+        Scanner->>Backend: POST /v/{id}/fallback-message
+        Backend->>Exotel: sendMaskedSMS → Owner
     end
 ```
 
----
-
-### Emergency Escalation Chain
-
-```mermaid
-stateDiagram-v2
-    [*] --> Calling_Owner: Emergency triggered
-    Calling_Owner --> Owner_Answered: Owner picks up
-    Calling_Owner --> Calling_Contact1: No answer / timeout
-    Owner_Answered --> [*]: Resolved
-
-    Calling_Contact1 --> Contact1_Answered: Contact 1 picks up
-    Calling_Contact1 --> Calling_Contact2: No answer
-    Contact1_Answered --> [*]: Resolved
-
-    Calling_Contact2 --> Contact2_Answered: Contact 2 picks up
-    Calling_Contact2 --> Calling_Contact3: No answer
-    Contact2_Answered --> [*]: Resolved
-
-    Calling_Contact3 --> Contact3_Answered: Contact 3 picks up
-    Calling_Contact3 --> All_Failed: No answer
-    Contact3_Answered --> [*]: Resolved
-    All_Failed --> [*]: Scanner notified
-```
-
----
-
-### Vehicle Transfer Flow
+### Emergency Chain Flow
 
 ```mermaid
 sequenceDiagram
-    participant Owner
-    participant NewOwner
-    participant API
-    participant DB
+    participant Scanner as 📱 Scanner
+    participant Backend as ⚙️ Backend
+    participant Exotel as 📞 Exotel
+    participant Owner as 👤 Owner
+    participant EC1 as 🆘 EC 1
+    participant EC2 as 🆘 EC 2
 
-    Owner->>API: POST /vehicles/:id/transfer/initiate
-    API->>DB: Set transfer_token (8-char), transfer_status='pending', expires=+48h
-    API->>DB: Nullify qr_token (QR goes inactive)
-    API-->>Owner: { transfer_code: "A3F9B2C1", expires_at }
+    Scanner->>Backend: POST /v/{id}/emergency { reason, phone }
 
-    Owner->>NewOwner: Share transfer code out-of-band
+    rect rgb(80, 20, 20)
+        Note over Backend,Owner: Step 1 — Call Owner (30s timeout)
+        Backend->>Exotel: Call owner
+        Exotel->>Owner: ☎️ Ringing...
+        alt Answers
+            Owner-->>Backend: ✅ Connected
+        else No Answer
+            Exotel-->>Backend: ❌ no-answer
+        end
+    end
 
-    NewOwner->>API: POST /vehicles/transfer/claim { transfer_code }
-    API->>DB: Find vehicle by token where status='pending'
-    API->>API: Check expiry, self-claim, 2-vehicle limit
-    API->>DB: vehicle.user_id = newOwnerId, status='needs_reverification'
-    API->>DB: Clear transfer fields
-    API-->>NewOwner: { success, vehicle }
+    rect rgb(80, 50, 10)
+        Note over Backend,EC1: Step 2 — Call EC1 (30s timeout)
+        Backend->>Exotel: Call EC1
+        Exotel->>EC1: ☎️ Ringing...
+        alt Answers
+            EC1-->>Backend: ✅ Connected
+        else No Answer
+            Exotel-->>Backend: ❌ no-answer
+        end
+    end
 
-    Note over NewOwner,DB: New owner submits docs for re-verification
-    Note over Owner,DB: Previous owner notified via notification
+    rect rgb(20, 40, 80)
+        Note over Backend,EC2: Step 3 — SMS Fallback to Everyone
+        Backend->>Exotel: SMS → Owner, EC1, EC2, EC3
+        Backend-->>Scanner: "Alert sent to all contacts"
+    end
 ```
 
 ---
 
-### Payment & QR Activation Flow
+## 🔧 Tech Stack
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Client
-    participant API
-    participant PayU
-    participant DB
-
-    User->>Client: Click "Activate QR" on verified vehicle
-    Client->>API: POST /payments/create-order { vehicle_id, plan }
-    API->>DB: Get user (name, decryptPhone(phone_encrypted))
-    API->>DB: Create Payment { status: 'created' }
-    API-->>Client: { txnid, amount, hash (SHA-512) }
-
-    Client->>PayU: Submit payment form
-    PayU->>API: POST /payments/verify (webhook)
-    API->>API: Verify SHA-512 hash
-    API->>DB: Payment.status = 'paid'
-    API->>DB: Generate random qr_token (32-byte hex)
-    API->>DB: Vehicle.qr_token = sig, qr_image_url = base64
-    API-->>Client: { success, qr_image_url }
-```
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18 + Vite, Tailwind CSS, Recharts |
+| Backend | Node.js + Express |
+| Database | MongoDB Atlas + Mongoose |
+| Cache | Redis (ioredis) — OTP & rate limiting |
+| Auth | JWT + Phone OTP |
+| Telecom | Exotel — masked calls & SMS |
+| Payments | PayU — UPI, cards, net banking |
+| Verification | DigiLocker API / Basic OCR |
+| QR | qrcode (npm) + HMAC-SHA256 signing |
+| Encryption | AES-256 (storage) + SHA-256 (lookups) |
 
 ---
 
-### Abuse Reporting & Auto-Escalation
+## 🔄 User Flows
+
+### Registration → Active QR
 
 ```mermaid
 flowchart TD
-    A[Scanner files abuse report] --> B[POST /call-logs/:id/report]
-    B --> C{Auth check}
-    C -->|Unauthorized| D[401 Rejected]
-    C -->|OK| E[Create AbuseReport]
-    E --> F{Check vehicle report count in 7d}
-    F -->|>=5 reports| G[Auto-suspend vehicle]
-    G --> H[Create vehicle_suspended notification]
-    F -->|less than 5| I{Check caller report count}
-    I -->|>=3 distinct callers| J[Add to global blocklist 7d]
-    I -->|less than 3| K[Report logged, admin review]
-    J --> L[Create abuse_report_filed notification]
-    K --> L
+    A([🆕 New User]) --> B[Enter Phone + OTP]
+    B --> C{OTP Valid?}
+    C -->|❌| B
+    C -->|✅| D[Set Profile Name]
+    D --> E[Register Vehicle]
+    E --> F[Upload RC + DL + Plate Photo]
+    F --> G{Verification Mode}
+    G -->|Basic| H[Auto-Verify Instantly]
+    G -->|DigiLocker| I[OAuth Flow]
+    I --> J{Match?}
+    J -->|❌| F
+    J -->|✅| H
+    H --> K[💳 Pay ₹499 via PayU]
+    K --> L{Payment OK?}
+    L -->|❌| K
+    L -->|✅| M([🎉 QR Generated — Active!])
+
+    style A fill:#1a1a2e,color:#00E5A0,stroke:#00E5A0
+    style M fill:#0A2D1A,color:#00E5A0,stroke:#00E5A0
+    style J fill:#2D0A0A,color:#FF6B6B,stroke:#FF3B5C
+```
+
+### Public QR Scan — All Paths
+
+```mermaid
+flowchart TD
+    A([📱 Scan QR]) --> B{Signature Valid?}
+    B -->|❌ Tampered| C[⚠️ Invalid QR]
+    B -->|✅| D{Vehicle Status}
+    D -->|Deactivated| E[🔒 Not Registered]
+    D -->|Suspended| F[⛔ Unavailable]
+    D -->|Expired| G[⏰ QR Expired]
+    D -->|Active| H{Comm Mode}
+    H -->|All| I[Call + SMS + Emergency]
+    H -->|Message Only| J[SMS + Emergency]
+    H -->|Silent| K[Emergency Only]
+    I & J & K --> L{Action}
+    L -->|📞 Call| M{Caller Blocked?}
+    M -->|Yes| N[❌ Unable to contact]
+    M -->|No| O[Exotel Masked Call]
+    O --> P{Answered?}
+    P -->|✅| Q[📞 Connected!]
+    P -->|❌| R[💬 Fallback SMS]
+    L -->|💬 SMS| S[Masked SMS via Exotel]
+    L -->|🚨 Emergency| T[Call Chain → SMS Fallback]
+
+    style A fill:#1a1a2e,color:#00E5A0,stroke:#00E5A0
+    style Q fill:#0A2D1A,color:#00E5A0,stroke:#00E5A0
+    style N fill:#2D0A0A,color:#FF6B6B,stroke:#FF3B5C
+    style C fill:#2D0A0A,color:#FF6B6B,stroke:#FF3B5C
+```
+
+### QR Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unverified: Vehicle Registered
+    Unverified --> Verified: Auto-Verification Passes
+    Unverified --> VerificationFailed: Checks Failed
+    VerificationFailed --> Unverified: Re-upload
+    Verified --> Active: Payment ₹499
+    Active --> Suspended: Admin Action
+    Suspended --> Active: Unsuspended
+    Active --> TransferPending: Initiate Transfer
+    TransferPending --> Active: Cancelled / Expired
+    TransferPending --> NeedsReverification: New Owner Claims
+    NeedsReverification --> Active: Verified + Paid
+    Active --> Expired: QR Valid Period Ends
+    Expired --> Active: Renewal ₹499
+    Active --> Deactivated: Owner Deletes
+    Deactivated --> [*]
 ```
 
 ---
 
-## Privacy & Security Model
+## 📊 Data Models
 
-### Phone Number Protection
+```mermaid
+erDiagram
+    USER ||--o{ VEHICLE : owns
+    USER ||--o{ PAYMENT : makes
+    USER ||--o{ NOTIFICATION : receives
+    USER ||--o{ SUPPORT_TICKET : creates
+    USER ||--o{ ORDER : places
+    VEHICLE ||--o{ EMERGENCY_CONTACT : has
+    VEHICLE ||--o{ CALL_LOG : receives
+    VEHICLE ||--o{ ABUSE_REPORT : reported_on
+    VEHICLE ||--o{ BLOCKLIST : has
+    CALL_LOG ||--o| ABUSE_REPORT : may_trigger
 
-Phone numbers go through **two transformations** before storage:
-
-```
-Raw phone: "9876543210"
-    ↓
-SHA-256 hash → stored as phone_hash (used for lookups, blocklist matching)
-    ↓
-AES-256-CTR encrypt → stored as phone_encrypted (used to decrypt for masked calls)
-```
-
-The raw number is **never persisted** to the database.
-
-### QR Signature Security
-
-Each QR code URL contains a **timing-safe token** (32-byte random hex):
-
-```
-/v/:vehicleId?sig=<token>
-```
-
-On scan:
-1. Server fetches `vehicle.qr_token`
-2. `crypto.timingSafeEqual(stored, provided)` — prevents timing attacks
-3. Token is nullified immediately on transfer, suspension, or deactivation
-
-### JWT Authentication
-
-- 30-day tokens signed with `JWT_SECRET`
-- `token_invalidated_at` field on User enables instant invalidation (phone change, account deletion)
-- All non-public routes protected by `authMiddleware`
-
----
-
-## Project Structure
-
-```
-sampark/
-├── client/                     # React 18 frontend
-│   ├── public/
-│   ├── src/
-│   │   ├── api/
-│   │   │   └── axios.js        # Axios instance — JWT header, /api/v1 base
-│   │   ├── pages/
-│   │   │   ├── Landing.jsx     # Marketing page — GSAP + 3D carousel
-│   │   │   ├── Login.jsx       # OTP two-step auth
-│   │   │   ├── ProfileSetup.jsx
-│   │   │   ├── Dashboard.jsx   # Vehicle cards + QR modal
-│   │   │   ├── RegisterVehicle.jsx  # 3-step form
-│   │   │   ├── PublicScan.jsx  # QR scan page — no auth
-│   │   │   ├── ClaimVehicle.jsx
-│   │   │   ├── Settings.jsx
-│   │   │   └── admin/
-│   │   │       ├── AdminDashboard.jsx
-│   │   │       └── Verifications.jsx
-│   │   └── App.jsx
-│   ├── index.html              # Google Fonts (Space Grotesk, Inter, JetBrains Mono)
-│   └── vite.config.js          # Proxy /api + /uploads → localhost:5000
-│
-└── server/                     # Express.js backend
-    ├── index.js                # Entry point + route mounting
-    ├── models/
-    │   ├── User.js             # phone_hash, phone_encrypted, privacy_score
-    │   ├── Vehicle.js          # plate, status, qr_token, transfer fields
-    │   ├── CallLog.js          # sender_phone_hash, type, status, duration
-    │   ├── Payment.js          # txnid, amount, status, valid_from/until
-    │   ├── Order.js            # type, amount, status, delivery_address
-    │   ├── AbuseReport.js      # call_log_id, caller_hash, reason, status
-    │   ├── Blocklist.js        # caller_hash, block_type, expires_at
-    │   ├── EmergencySession.js # vehicle_id, steps[], overall_status
-    │   └── Notification.js     # user_id, type, title, body, read
-    ├── routes/
-    │   ├── auth.js             # /send-otp, /verify-otp
-    │   ├── settings.js         # /me/settings, /me/payments, /me/export
-    │   ├── vehicles.js         # CRUD + /qr + /call-logs
-    │   ├── vehicleTransfer.js  # /transfer/initiate + /claim + /cancel
-    │   ├── public.js           # /v/:id — message, call, emergency
-    │   ├── payments.js         # PayU create-order + verify webhook
-    │   ├── orders.js           # Sticker/physical orders
-    │   ├── callLogs.js         # /:id/report (abuse filing)
-    │   ├── admin.js            # Verif + abuse + blocklist + suspension
-    │   └── digilockerAuth.js   # DigiLocker KYC OAuth flow
-    ├── middleware/
-    │   ├── auth.js             # JWT verify + token_invalidated_at check
-    │   └── upload.js           # Multer — rc_doc, dl_doc, plate_photo (5 MB)
-    ├── utils/
-    │   ├── encrypt.js          # encryptPhone / hashPhone / decryptPhone
-    │   ├── otp.js              # generateOtp / storeOtp / verifyOtp (in-memory)
-    │   ├── qr.js               # generateSignedUrl / verifySignature
-    │   ├── rateLimit.js        # checkCallerRateLimit / checkVehicleRateLimit
-    │   ├── callerProfile.js    # getCallerProfile / isCallerBlocked
-    │   └── privacyScore.js     # calculatePrivacyScore / refreshPrivacyScore
-    └── services/
-        ├── exotel.js           # Masked call bridge (MOCK_CALLS=true in dev)
-        └── notification.js     # createNotification helper
+    USER {
+        ObjectId _id PK
+        String phone_hash "SHA-256 indexed"
+        String phone_encrypted "AES-256"
+        String name
+        String role "user | admin"
+        Number privacy_score "0-100"
+        Date deleted_at "soft delete"
+    }
+    VEHICLE {
+        ObjectId _id PK
+        ObjectId user_id FK
+        String plate_number
+        String status "verified | suspended | deactivated"
+        String comm_mode "all | message_only | silent"
+        String qr_token "HMAC-signed"
+        Date qr_valid_until
+        String transfer_status "none | pending | completed"
+    }
+    CALL_LOG {
+        ObjectId _id PK
+        ObjectId vehicle_id FK
+        String caller_hash "SHA-256"
+        String type "call | sms | emergency"
+        String status "completed | no-answer | busy | failed"
+        String emergency_chain_id
+        Date created_at
+    }
+    PAYMENT {
+        ObjectId _id PK
+        ObjectId vehicle_id FK
+        String payu_payment_id
+        Number amount "paise"
+        String status "created | paid | failed"
+        Date valid_until
+    }
+    BLOCKLIST {
+        ObjectId _id PK
+        ObjectId vehicle_id FK
+        String caller_hash
+        String block_type "vehicle_specific | global"
+        Date expires_at "null = permanent"
+    }
 ```
 
 ---
 
-## API Reference
+## 🛠️ API Reference
 
-### Authentication — `/api/v1/auth`
-
+### Authentication
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/send-otp` | — | Send OTP to phone number |
-| POST | `/verify-otp` | — | Verify OTP → JWT |
+| `POST` | `/api/v1/auth/send-otp` | ❌ | Send OTP |
+| `POST` | `/api/v1/auth/verify-otp` | ❌ | Verify OTP → JWT |
+| `GET` | `/api/v1/users/me` | 🔐 | Current user + privacy score |
 
-### User / Settings — `/api/v1/users`
-
+### Vehicles
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/me/settings` | JWT | Get profile + notification prefs |
-| PUT | `/me/settings` | JWT | Update name / email / language / prefs |
-| POST | `/me/change-phone` | JWT | Phase 1: send OTP to new number |
-| POST | `/me/change-phone/verify` | JWT | Phase 2: confirm OTP, rotate credentials |
-| POST | `/me/avatar` | JWT | Upload profile picture |
-| GET | `/me/payments` | JWT | Payment history |
-| GET | `/me/export` | JWT | Full data export (GDPR) |
-| DELETE | `/me` | JWT | Soft-delete account |
-| GET | `/me/privacy-score` | JWT | Get computed privacy score |
+| `POST` | `/api/v1/vehicles` | 🔐 | Register (multipart: RC, DL, photo) |
+| `GET` | `/api/v1/vehicles` | 🔐 | List user's vehicles |
+| `GET` | `/api/v1/vehicles/:id` | 🔐 | Detail with call logs |
+| `POST` | `/api/v1/vehicles/:id/transfer/initiate` | 🔐 | Start transfer → 48h code |
+| `POST` | `/api/v1/vehicles/transfer/claim` | 🔐 | Claim with transfer code |
+| `DELETE` | `/api/v1/vehicles/:id` | 🔐 | Soft-delete |
 
-### Vehicles — `/api/v1/vehicles`
+### Public (QR Scan — No Auth)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/v/:id` | Validate QR, return plate + comm_mode |
+| `POST` | `/api/v1/v/:id/call` | Initiate masked call |
+| `POST` | `/api/v1/v/:id/sms` | Send masked SMS |
+| `POST` | `/api/v1/v/:id/emergency` | Trigger emergency chain |
+| `GET` | `/api/v1/v/:id/emergency-status/:chainId` | Poll chain progress |
+| `POST` | `/api/v1/v/:id/fallback-message` | SMS after missed call |
+| `POST` | `/api/v1/v/:id/report` | Report QR/vehicle issue |
 
+### Payments
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/` | JWT | List user vehicles |
-| POST | `/` | JWT | Register new vehicle (plate + docs) |
-| GET | `/:id` | JWT | Get vehicle details |
-| PUT | `/:id` | JWT | Update vehicle fields |
-| GET | `/:id/qr` | JWT | Get QR image for verified vehicle |
-| GET | `/:id/call-logs` | JWT | Paginated call log history |
-| POST | `/:id/transfer/initiate` | JWT | Start transfer (generates code) |
-| POST | `/transfer/claim` | JWT | Claim vehicle with transfer code |
-| POST | `/:id/transfer/cancel` | JWT | Cancel pending transfer |
-| GET | `/:id/transfer/status` | JWT | Poll transfer state |
-| DELETE | `/:id` | JWT | Soft-delete vehicle |
+| `POST` | `/api/v1/payments/create-order` | 🔐 | Create PayU order |
+| `POST` | `/api/v1/payments/verify` | 🔐 | Verify signature → generate QR |
+| `POST` | `/api/v1/payments/renew` | 🔐 | Renewal order |
 
-### Public Scan — `/api/v1/v`
-
+### Admin
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/:vehicleId` | sig | Validate QR sig, return vehicle info |
-| POST | `/:vehicleId/message` | sig | Send message to owner |
-| POST | `/:vehicleId/call` | sig | Request masked call |
-| POST | `/:vehicleId/emergency` | sig | Trigger emergency escalation chain |
-| GET | `/:vehicleId/emergency/:sessionId` | sig | Poll emergency session status |
-| GET | `/sms-lookup` | — | Look up vehicle by plate for SMS flow |
+| `GET` | `/api/v1/admin/analytics` | 👑 | Full analytics |
+| `GET/PUT` | `/api/v1/admin/abuse-reports/:id` | 👑 | Review + action |
+| `GET/DELETE` | `/api/v1/admin/blocklist/:id` | 👑 | Manage blocks |
+| `PUT` | `/api/v1/admin/suspended-vehicles/:id/unsuspend` | 👑 | Unsuspend |
+| `GET/PUT` | `/api/v1/admin/orders/:id` | 👑 | Order pipeline |
+| `GET/POST/PUT` | `/api/v1/admin/support/:id` | 👑 | Support tickets |
 
-### Support — `/api/v1/support`
+### Webhooks
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/webhooks/exotel` | Call status → triggers fallback chain |
+| `POST` | `/api/v1/webhooks/payu` | Payment status updates |
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/faq` | — | Public FAQ list |
-| POST | `/` | JWT | Create support ticket |
-| GET | `/` | JWT | List current user tickets |
-| GET | `/:ticketId` | JWT | Get one ticket with message thread |
-| POST | `/:ticketId/message` | JWT | Add user reply to ticket |
-| PUT | `/:ticketId/close` | JWT | Close ticket with optional rating |
-| POST | `/:ticketId/reopen` | JWT | Reopen closed ticket (within 7 days) |
-
-### Payments — `/api/v1/payments`
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/create-order` | JWT | Create PayU payment order |
-| POST | `/verify` | webhook | PayU result callback → activate QR |
-| POST | `/renew` | JWT | Renew expired QR subscription |
-
-### Admin — `/api/v1/admin`
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/pending` | admin JWT | List pending verifications |
-| POST | `/verify/:vehicleId` | admin JWT | Approve / reject document |
-| GET | `/abuse-reports` | admin JWT | List abuse reports |
-| PUT | `/abuse-reports/:id` | admin JWT | Resolve report |
-| GET | `/blocklist` | admin JWT | View blocklist |
-| POST | `/blocklist` | admin JWT | Add to blocklist |
-| DELETE | `/blocklist/:id` | admin JWT | Remove from blocklist |
-| GET | `/suspended` | admin JWT | List suspended vehicles |
-| POST | `/suspended/:id/unsuspend` | admin JWT | Lift suspension |
-| GET | `/public-reports` | admin JWT | List public reports filed from scan page |
-| PUT | `/public-reports/:id` | admin JWT | Dismiss or mark for investigation |
-| GET | `/support/stats` | admin JWT | Ticket volume, response and resolution metrics |
-| GET | `/support` | admin JWT | Filtered support queue (status/priority/category) |
-| GET | `/support/:ticketId` | admin JWT | Ticket detail with user context |
-| POST | `/support/:ticketId/message` | admin JWT | Reply to ticket and set awaiting user |
-| PUT | `/support/:ticketId/status` | admin JWT | Update ticket status |
-| PUT | `/support/:ticketId/priority` | admin JWT | Update ticket priority |
+> 🔐 JWT Bearer required · 👑 Admin role required · ❌ Public
 
 ---
 
-## Setup & Installation
+## 🔒 Security Architecture
+
+```mermaid
+flowchart LR
+    subgraph Auth["🔐 Auth"]
+        A[OTP via SMS] --> B[JWT — 7d expiry]
+    end
+    subgraph Encryption["🔑 Encryption"]
+        C[Phone Numbers] --> D[AES-256 at rest]
+        C --> E[SHA-256 for lookups]
+    end
+    subgraph QR["📝 QR Signing"]
+        F[Vehicle ID + Secret] --> G[HMAC-SHA256]
+        G --> H{Sig Valid?}
+        H -->|❌| I[403 Forbidden]
+        H -->|✅| J[Serve Page]
+    end
+    subgraph RateLimits["🛡️ Rate Limits"]
+        K[OTP: 3/10min]
+        L[Calls: 3/hr per caller]
+        M[SMS: 5/hr per caller]
+        N[Public scan: 30/min]
+    end
+```
+
+| Layer | Measure |
+|-------|---------|
+| Transport | HTTPS enforced |
+| Auth | JWT + OTP — phone-verified only |
+| Phone Storage | AES-256 encrypted + SHA-256 hashed |
+| QR URLs | HMAC-SHA256 signed, server-validated |
+| Public Page | Zero PII — only plate number shown |
+| Compliance | DPDP Act: data export, soft deletes, anonymized logs |
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
-
-- Node.js 18+
-- MongoDB Atlas account (or local MongoDB)
-- Exotel account (optional — `MOCK_CALLS=true` for local dev)
-- PayU account (optional for payment testing)
-
-### 1. Clone & Install
+- Node.js 18+, MongoDB (Atlas free tier), Redis, Exotel account, PayU account
 
 ```bash
-git clone https://github.com/your-username/sampark.git
-cd sampark
+git clone https://github.com/yourusername/sampaark.git
 
-# Install server dependencies
-cd server && npm install
+# Backend
+cd server && npm install && cp .env.example .env && npm run dev
 
-# Install client dependencies
-cd ../client && npm install
+# Frontend
+cd client && npm install && cp .env.example .env && npm run dev
 ```
 
-### 2. Server Environment
+### Mock Mode (Dev)
+Set `MOCK_CALLS=true` in `.env`:
+- Phones ending in `0` → no-answer, `1` → busy, others → connected
+- Emergency chain simulates full cascade with 3s delays
+- PayU test card: `4111 1111 1111 1111`, OTP: `1234`
 
-Create `server/.env`:
+---
+
+## ⚙️ Environment Variables
 
 ```env
-# Database
-MONGO_URI=mongodb+srv://<user>:<pass>@cluster.mongodb.net/sampark
-
-# Auth
-JWT_SECRET=your-super-secret-key-min-32-chars
+# Server
 PORT=5000
+NODE_ENV=development
+MONGO_URI=mongodb+srv://...
+JWT_SECRET=min_32_chars
+ENCRYPTION_KEY=exactly_32_chars
+QR_SECRET=your_hmac_secret
+REDIS_URL=redis://localhost:6379
 
-# QR
-APP_URL=http://localhost:5173
-
-# Phone encryption
-PHONE_ENCRYPTION_KEY=32-byte-hex-key-for-aes256
-PHONE_ENCRYPTION_IV=16-byte-hex-iv
-
-# Calls (set MOCK_CALLS=true for local dev — no Exotel needed)
+# Exotel
+EXOTEL_API_KEY=...
+EXOTEL_API_TOKEN=...
+EXOTEL_SID=...
+EXOTEL_VIRTUAL_NUMBER=...
 MOCK_CALLS=true
-EXOTEL_API_KEY=your-key
-EXOTEL_API_TOKEN=your-token
-EXOTEL_SID=your-sid
-EXOTEL_CALLER_ID=your-number
 
-# Payments (optional for dev)
-PAYU_MERCHANT_KEY=your-key
-PAYU_MERCHANT_SALT=your-salt
+# PayU
+PAYU_KEY=...
+PAYU_SALT=...
 PAYU_BASE_URL=https://test.payu.in
 
-# DigiLocker (optional)
-DIGILOCKER_CLIENT_ID=your-id
-DIGILOCKER_CLIENT_SECRET=your-secret
-DIGILOCKER_REDIRECT_URI=http://localhost:5000/api/v1/digilocker/callback
-
-# Environment
-NODE_ENV=development
+# Frontend URL
+FRONTEND_URL=http://localhost:5173
 ```
-
-### 3. Client Environment (optional)
-
-Create `client/.env`:
 
 ```env
-# Only needed for deployed environments (dev uses Vite proxy)
-VITE_BACKEND_URL=
+# client/.env
+VITE_API_URL=http://localhost:5000/api/v1
+VITE_PAYU_KEY=your_merchant_key
 ```
 
-### 4. Run
+---
 
-```bash
-# Terminal 1 — Backend
-cd server && node index.js
-# → http://localhost:5000
+## 📁 Project Structure
 
-# Terminal 2 — Frontend
-cd client && npm run dev
-# → http://localhost:5173
+```
+sampaark/
+├── server/
+│   ├── models/          # User, Vehicle, CallLog, EmergencyContact, Payment...
+│   ├── routes/          # auth, vehicles, public, payments, admin, webhooks
+│   ├── middleware/       # auth.js, adminAuth.js, errorHandler.js
+│   ├── services/        # exotel, emergencyChain, notificationService, autoModeration
+│   ├── utils/           # otp, qr, encryption, privacyScore, analytics
+│   └── index.js
+└── client/
+    └── src/
+        ├── pages/       # Login, Dashboard, RegisterVehicle, PublicScan, Settings, admin/*
+        ├── components/  # QRCard, PrivacyScore, PaymentButton, InstallPrompt
+        ├── layouts/     # AdminLayout
+        └── api/         # axios.js with JWT interceptor
 ```
 
-### 5. Create Admin User
+---
 
-In MongoDB Atlas, set `is_admin: true` on a user document directly, then log in with that account to access `/admin`.
+## 💰 Revenue Model
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'pie1': '#FF6B6B', 'pie2': '#4ECDC4', 'pie3': '#FFE66D', 'pie4': '#A78BFA', 'pieTextColor': '#ffffff', 'pieLegendTextColor': '#ffffff', 'pieStrokeColor': '#1a1a2e', 'pieOpacity': '1', 'background': '#1a1a2e', 'mainBkg': '#1a1a2e'}}}%%
+pie title Revenue Streams
+    "QR Subscription ₹499/yr" : 65
+    "Physical Card ₹99–199" : 15
+    "B2B Fleet Plans" : 15
+    "Premium Features" : 5
+```
+
+| Stream | Price | Model |
+|--------|-------|-------|
+| QR Subscription | ₹499/year/vehicle | Recurring — primary |
+| Physical Card | ₹99 standard / ₹199 express | One-time |
+| B2B Fleet | Custom | Gated communities, corporate |
+| Premium (future) | TBD | Multi-language, priority support |
 
 ---
 
-## Key Design Decisions
+## 🗺️ Roadmap
 
-### Why in-memory OTP storage?
-Simple and sufficient for MVP. Replace with Redis in production for multi-instance deployments.
+**v1.0 — Complete**
+OTP auth · Vehicle registration + document upload · Auto-verification · PayU payments · HMAC-signed QR · Masked calls & SMS via Exotel · Emergency call chain · QR expiry & renewal · Print + physical card ordering · Notification center · Privacy score · Admin analytics · Abuse management + auto-moderation · Support ticketing · PWA
 
-### Why AES-256-CTR + SHA-256 hash stored separately?
-The hash allows fast indexed lookups (blocklist checks, duplicate detection) without decryption. The ciphertext allows recovery of the real number when needed (e.g., bridging a masked call). Neither alone is sufficient.
-
-### Why soft-delete instead of hard-delete?
-Preserves `call_logs` and `abuse_reports` for abuse tracking. Anonymized call logs remain for platform safety even after account deletion.
-
-### Why QR signature invalidation on transfer?
-A vehicle's QR sticker may still be physically attached. Invalidating the token ensures no contact attempts can be routed to the old owner after transfer initiation.
-
-### Why GSAP y/scale only (no opacity) on page load?
-React 18 StrictMode double-mounts components. If a GSAP animation sets `opacity: 0` as initial state and the component unmounts before the animation completes, the element is left invisible with no trigger to restore it.
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Frontend | React 18, Vite, React Router v6 |
-| Styling | Inline styles (hex values), Space Grotesk + Inter fonts |
-| Animation | GSAP 3 + ScrollTrigger |
-| HTTP Client | Axios |
-| Backend | Express.js 4 |
-| Database | MongoDB Atlas (Mongoose ODM) |
-| Authentication | JWT (30d), OTP via phone |
-| File Upload | Multer (5 MB, local disk → S3 planned) |
-| Calls | Exotel masked bridge (mock mode available) |
-| Payments | PayU (SHA-512 hash verification) |
-| QR Codes | `qrcode` npm package → base64 PNG |
-| KYC | DigiLocker OAuth (optional) |
-| Cryptography | Node.js `crypto` (AES-256-CTR, SHA-256, HMAC) |
-
----
-
-## Roadmap
-
-- [ ] Redis for OTP storage (multi-instance ready)
-- [ ] AWS S3 for document storage (replace local disk)
-- [ ] Real SMS provider integration (Twilio / MSG91)
-- [ ] Push notifications (FCM)
-- [ ] Rate limiting on message endpoints (in-memory, like calls)
-- [ ] DigiLocker full flow testing
-- [ ] Mobile app (React Native)
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Follow the existing code style (no Tailwind, inline hex styles on frontend)
-4. Keep phone numbers as hashes in logs — never log raw numbers
-5. Submit a pull request with a clear description
-
----
-
-## License
-
-MIT © 2025 Sampark Contributors
+**v2.0 — Planned**
+DigiLocker production integration · Push notifications (Firebase) · Multi-language (Hindi + regional) · B2B fleet dashboard · WhatsApp Business API · AI abuse pattern detection · Insurance/toll integrations
 
 ---
 
 <div align="center">
 
-Built with privacy in mind. Your number, your rules.
+**Built with 🛡️ privacy in mind**
+
+*Sampaark — Because your phone number shouldn't be public just because your car is parked.*
 
 </div>
