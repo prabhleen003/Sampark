@@ -1,5 +1,6 @@
 import express from 'express';
 import crypto, { randomBytes } from 'crypto';
+import { createRequire } from 'module';
 import Vehicle from '../models/Vehicle.js';
 import User from '../models/User.js';
 import CallLog from '../models/CallLog.js';
@@ -7,13 +8,15 @@ import EmergencySession from '../models/EmergencySession.js';
 import PublicReport from '../models/PublicReport.js';
 import ScanLog from '../models/ScanLog.js';
 import { verifySignature } from '../utils/qr.js';
-import { initiateCall } from '../services/exotel.js';
+import { initiateCall, sendMaskedSMS } from '../services/exotel.js';
 import { checkCallerRateLimit, checkVehicleRateLimit } from '../utils/rateLimit.js';
 import { decryptPhone, hashPhone } from '../utils/encrypt.js';
 import { createNotification } from '../services/notification.js';
 import { isCallerBlocked } from '../utils/callerProfile.js';
 
 const router = express.Router();
+const require = createRequire(import.meta.url);
+const smsTemplates = require('../data/smsTemplates.json');
 
 const INDIAN_PHONE_RE = /^[6-9]\d{9}$/;
 
@@ -198,6 +201,115 @@ router.post('/:vehicleId/report', async (req, res) => {
   await PublicReport.create({ vehicle_id: vehicleId, reporter_phone_hash: reporterHash, reason, description: desc });
 
   res.status(201).json({ success: true, message: 'Report submitted. Thank you for helping keep Sampaark safe.' });
+});
+
+// GET /api/v1/v/:vehicleId/sms-templates — public SMS template list
+router.get('/:vehicleId/sms-templates', (req, res) => {
+  res.json(smsTemplates);
+});
+
+// POST /api/v1/v/:vehicleId/sms — send masked SMS to owner
+router.post('/:vehicleId/sms', async (req, res) => {
+  const { vehicleId } = req.params;
+  const { caller_phone, sig, message, template_id } = req.body;
+
+  if (!sig || !(await verifySignature(vehicleId, sig))) {
+    return res.status(403).json({ error: 'Invalid QR code' });
+  }
+
+  const vehicle = await Vehicle.findById(vehicleId).populate('user_id', 'phone_encrypted');
+  if (!vehicle || vehicle.status !== 'verified') {
+    return res.status(404).json({ error: 'Vehicle not found or inactive' });
+  }
+  if (!vehicle.user_id?.phone_encrypted) {
+    return res.status(500).json({ error: 'Could not reach vehicle owner' });
+  }
+
+  if (vehicle.qr_valid_until && new Date() > new Date(vehicle.qr_valid_until)) {
+    return res.status(403).json({ error: 'QR code has expired' });
+  }
+
+  if (vehicle.comm_mode === 'silent') {
+    return res.status(403).json({
+      error: 'Vehicle owner has disabled messages. Try the Emergency button if urgent.',
+    });
+  }
+
+  if (!caller_phone || !INDIAN_PHONE_RE.test(caller_phone)) {
+    return res.status(400).json({ error: 'Valid 10-digit phone number required' });
+  }
+
+  const callerHash = hashPhone(caller_phone);
+  if (await isCallerBlocked(callerHash, vehicle._id)) {
+    return res.status(403).json({ error: 'Unable to contact this vehicle at this time' });
+  }
+
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const recentSMS = await CallLog.countDocuments({
+    vehicle_id: vehicle._id,
+    sender_phone_hash: callerHash,
+    type: 'sms',
+    created_at: { $gte: oneHourAgo },
+  });
+  if (recentSMS >= 5) {
+    return res.status(429).json({ error: 'Too many messages. Try again later.' });
+  }
+
+  let messageText;
+  if (template_id) {
+    const template = smsTemplates.find(t => t.id === template_id);
+    if (!template) {
+      return res.status(400).json({ error: 'Invalid template' });
+    }
+    messageText = template.text;
+  } else if (message?.trim()) {
+    if (message.trim().length > 160) {
+      return res.status(400).json({ error: 'SMS must be under 160 characters' });
+    }
+    messageText = message.trim();
+  } else {
+    return res.status(400).json({ error: 'Message or template required' });
+  }
+
+  const smsBody = `[Sampaark] Msg for ${vehicle.plate_number}: "${messageText}" - Reply to respond.`;
+  const ownerPhone = decryptPhone(vehicle.user_id.phone_encrypted);
+  const smsResult = await sendMaskedSMS(caller_phone, ownerPhone, smsBody);
+
+  const callLog = await CallLog.create({
+    vehicle_id: vehicle._id,
+    sender_phone_hash: callerHash,
+    exotel_sid: smsResult.sid,
+    exotel_session_id: smsResult.sid,
+    type: 'sms',
+    sms_sid: smsResult.sid,
+    sms_status: smsResult.status,
+    message_text: messageText,
+    message_template: template_id || null,
+    custom_text: messageText,
+    status: smsResult.status === 'sent' ? 'completed' : 'failed',
+  });
+
+  await createNotification(
+    vehicle.user_id._id,
+    'message_received',
+    'New SMS Received',
+    `Message about ${vehicle.plate_number}: "${messageText}"`,
+    vehicle._id,
+    '/dashboard',
+    { log_id: callLog._id.toString(), channel: 'sms' }
+  );
+
+  if (smsResult.status === 'sent') {
+    return res.json({
+      success: true,
+      message: 'SMS sent to vehicle owner. If they reply, you will receive it on your phone.',
+      log_id: callLog._id,
+    });
+  }
+
+  return res.status(500).json({
+    error: 'Failed to send SMS. Please try again or use the Call button.',
+  });
 });
 
 // GET /api/v1/v/:vehicleId/templates — message templates list
@@ -400,11 +512,14 @@ router.get('/:vehicleId/call-status/:callLogId', async (req, res) => {
 // POST /api/v1/v/:vehicleId/fallback-message — send fallback message after missed call (public)
 router.post('/:vehicleId/fallback-message', async (req, res) => {
   const { vehicleId } = req.params;
-  const { fallback_token, message, urgency } = req.body;
+  const { fallback_token, message, urgency, caller_phone } = req.body;
 
   if (!fallback_token) return res.status(400).json({ success: false, message: 'Token required' });
   if (!message?.trim()) return res.status(400).json({ success: false, message: 'Message is required' });
-  if (message.trim().length > 300) return res.status(400).json({ success: false, message: 'Message must be 300 characters or less' });
+  if (message.trim().length > 160) return res.status(400).json({ success: false, message: 'Message must be 160 characters or less' });
+  if (!caller_phone || !INDIAN_PHONE_RE.test(caller_phone)) {
+    return res.status(400).json({ success: false, message: 'Valid caller phone is required' });
+  }
 
   const VALID_URGENCIES = ['normal', 'urgent', 'emergency'];
   const urgencyValue = VALID_URGENCIES.includes(urgency) ? urgency : 'urgent';
@@ -424,7 +539,38 @@ router.post('/:vehicleId/fallback-message', async (req, res) => {
   log.fallback_token_used = true;
   await log.save();
 
-  res.json({ success: true });
+  const vehicle = await Vehicle.findById(vehicleId).select('plate_number user_id');
+  if (!vehicle) {
+    return res.status(404).json({ success: false, message: 'Vehicle not found' });
+  }
+
+  const owner = await User.findById(vehicle.user_id).select('phone_encrypted');
+  if (!owner) {
+    return res.status(500).json({ success: false, message: 'Could not reach vehicle owner' });
+  }
+
+  const urgencyLabel = urgencyValue === 'emergency'
+    ? 'EMERGENCY'
+    : urgencyValue === 'urgent'
+      ? 'URGENT'
+      : 'Message';
+  const fallbackSMS = `[Sampaark ${urgencyLabel}] Missed call for ${vehicle.plate_number}: "${message.trim().slice(0, 100)}"`;
+  const smsResult = await sendMaskedSMS(caller_phone, decryptPhone(owner.phone_encrypted), fallbackSMS);
+
+  await CallLog.create({
+    vehicle_id: vehicle._id,
+    sender_phone_hash: hashPhone(caller_phone),
+    type: 'sms',
+    exotel_sid: smsResult.sid,
+    exotel_session_id: smsResult.sid,
+    sms_sid: smsResult.sid,
+    sms_status: smsResult.status,
+    message_text: fallbackSMS,
+    custom_text: message.trim(),
+    status: smsResult.status === 'sent' ? 'completed' : 'failed',
+  });
+
+  res.json({ success: true, sms_status: smsResult.status });
 });
 
 // ── Emergency call chain helpers ──────────────────────────────────────────────
@@ -448,12 +594,58 @@ async function emergencyCallAttempt(callerPhone, targetPhone, isMock, isOwner) {
   return 'no-answer'; // pessimistic — real webhook would update status
 }
 
+async function sendEmergencyFallbackSMS(vehicle, emergencyReason, callerPhone) {
+  const callerHash = hashPhone(callerPhone);
+
+  const owner = await User.findById(vehicle.user_id).select('phone_encrypted');
+  if (!owner) return;
+  const ownerPhone = decryptPhone(owner.phone_encrypted);
+
+  const ownerMsg = `[SAMPAARK EMERGENCY] ${emergencyReason} reported at vehicle ${vehicle.plate_number}. Someone needs urgent help. Check immediately.`;
+  const ownerResult = await sendMaskedSMS(callerPhone, ownerPhone, ownerMsg);
+  await CallLog.create({
+    vehicle_id: vehicle._id,
+    sender_phone_hash: callerHash,
+    type: 'sms',
+    exotel_sid: ownerResult.sid,
+    exotel_session_id: ownerResult.sid,
+    sms_sid: ownerResult.sid,
+    sms_status: ownerResult.status,
+    message_text: ownerMsg,
+    custom_text: emergencyReason,
+    status: ownerResult.status === 'sent' ? 'completed' : 'failed',
+    is_emergency_sms: true,
+  });
+
+  const contacts = [...(vehicle.emergency_contacts || [])].sort((a, b) => a.priority - b.priority);
+  for (const contact of contacts) {
+    const contactPhone = decryptPhone(contact.phone_encrypted);
+    const contactMsg = `[SAMPAARK EMERGENCY] ${emergencyReason} at vehicle ${vehicle.plate_number}. You are listed as ${contact.label}. Please respond urgently.`;
+    const contactResult = await sendMaskedSMS(callerPhone, contactPhone, contactMsg);
+
+    await CallLog.create({
+      vehicle_id: vehicle._id,
+      sender_phone_hash: callerHash,
+      type: 'sms',
+      exotel_sid: contactResult.sid,
+      exotel_session_id: contactResult.sid,
+      sms_sid: contactResult.sid,
+      sms_status: contactResult.status,
+      message_text: contactMsg,
+      custom_text: emergencyReason,
+      status: contactResult.status === 'sent' ? 'completed' : 'failed',
+      is_emergency_sms: true,
+      emergency_contact_label: contact.label,
+    });
+  }
+}
+
 /**
  * Run the full emergency call chain:
  * owner → contact 1 → contact 2 → contact 3 → all_failed
  * Updates EmergencySession stage at each step.
  */
-async function runEmergencyChain(sessionId, ownerPhoneRaw, contacts, callerPhone) {
+async function runEmergencyChain(sessionId, ownerPhoneRaw, contacts, callerPhone, vehicle, emergencyReason) {
   const isMock = process.env.MOCK_CALLS === 'true';
 
   // Attempt: owner
@@ -475,6 +667,16 @@ async function runEmergencyChain(sessionId, ownerPhoneRaw, contacts, callerPhone
   }
 
   await EmergencySession.findByIdAndUpdate(sessionId, { stage: 'all_failed' });
+  await sendEmergencyFallbackSMS(vehicle, emergencyReason, callerPhone);
+  await createNotification(
+    vehicle.user_id,
+    'emergency_unresolved',
+    'Unresolved Emergency',
+    `Emergency (${emergencyReason}) reported at ${vehicle.plate_number}. Nobody answered. Emergency SMS sent to you and all emergency contacts.`,
+    vehicle._id,
+    '/dashboard',
+    { session_id: sessionId.toString() }
+  );
 }
 
 // POST /api/v1/v/:vehicleId/emergency — initiate emergency call chain (public)
@@ -524,7 +726,14 @@ router.post('/:vehicleId/emergency', async (req, res) => {
   );
 
   // Fire-and-forget — chain runs asynchronously while client polls
-  runEmergencyChain(session._id, decryptPhone(owner.phone_encrypted), contacts, caller_phone)
+  runEmergencyChain(
+    session._id,
+    decryptPhone(owner.phone_encrypted),
+    contacts,
+    caller_phone,
+    vehicle,
+    description || 'Emergency'
+  )
     .catch(e => console.error('Emergency chain error:', e.message));
 
   res.json({ success: true, emergency_session_id: session._id });

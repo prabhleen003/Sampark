@@ -20,7 +20,9 @@ import authMiddleware from './middleware/auth.js';
 import adminMiddleware from './middleware/adminAuth.js';
 import CallLog from './models/CallLog.js';
 import Vehicle from './models/Vehicle.js';
+import User from './models/User.js';
 import { createNotification } from './services/notification.js';
+import { decryptPhone } from './utils/encrypt.js';
 
 dotenv.config();
 
@@ -90,6 +92,55 @@ app.post('/api/v1/webhooks/exotel', express.urlencoded({ extended: false }), asy
     }
   }
   res.sendStatus(200);
+});
+
+// Exotel SMS webhook — owner replies to virtual number
+app.post('/api/v1/webhooks/exotel-sms', express.urlencoded({ extended: false }), async (req, res) => {
+  try {
+    const { From, Body } = req.body;
+    if (!From || !Body) {
+      return res.sendStatus(400);
+    }
+
+    const normalizedFrom = String(From).replace(/\D/g, '').slice(-10);
+    const users = await User.find().select('_id phone_encrypted');
+    let matchedUser = null;
+
+    for (const user of users) {
+      const userPhone = decryptPhone(user.phone_encrypted).replace(/\D/g, '').slice(-10);
+      if (userPhone && userPhone === normalizedFrom) {
+        matchedUser = user;
+        break;
+      }
+    }
+
+    if (!matchedUser) {
+      console.log('[SMS WEBHOOK] Could not match reply to a user');
+      return res.sendStatus(200);
+    }
+
+    const vehicles = await Vehicle.find({ user_id: matchedUser._id }).select('_id');
+    const vehicleIds = vehicles.map(v => v._id);
+
+    const recentLog = await CallLog.findOne({
+      vehicle_id: { $in: vehicleIds },
+      type: 'sms',
+      status: 'completed',
+      created_at: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    }).sort({ created_at: -1 });
+
+    if (recentLog) {
+      recentLog.owner_reply = Body;
+      recentLog.owner_replied_at = new Date();
+      await recentLog.save();
+      console.log(`[SMS WEBHOOK] Owner reply saved for log ${recentLog._id}`);
+    }
+
+    return res.sendStatus(200);
+  } catch (error) {
+    console.error('[SMS WEBHOOK ERROR]', error);
+    return res.sendStatus(500);
+  }
 });
 
 // MongoDB connection

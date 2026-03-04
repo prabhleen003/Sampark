@@ -1,0 +1,8 @@
+[
+  { "id": "block", "text": "Your car is blocking my vehicle. Please move it.", "emoji": "🚗" },
+  { "id": "lights", "text": "Your car lights are on.", "emoji": "💡" },
+  { "id": "towing", "text": "Your car is being towed. Come immediately.", "emoji": "🚨" },
+  { "id": "alarm", "text": "Your car alarm is going off.", "emoji": "🔔" },
+  { "id": "callback", "text": "Need to talk about your vehicle. Please call back.", "emoji": "📞" },
+  { "id": "parking", "text": "Your parking ticket is about to expire.", "emoji": "🅿️" }
+]

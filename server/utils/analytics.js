@@ -38,7 +38,7 @@ export async function getOverviewStats() {
     Vehicle.countDocuments(),
     Vehicle.countDocuments({ status: 'verified', qr_valid_until: { $gt: new Date() } }),
     CallLog.countDocuments({ type: 'call' }),
-    CallLog.countDocuments({ type: 'message' }),
+    CallLog.countDocuments({ type: { $in: ['message', 'sms'] } }),
     CallLog.countDocuments({ type: 'emergency' }),
     AbuseReport.countDocuments({ status: 'open' }),
     Order.countDocuments({ status: 'paid' }),
@@ -74,7 +74,7 @@ export async function getCommunicationTrend(days) {
     const { date, type } = row._id;
     if (!map[date]) map[date] = { date, calls: 0, messages: 0, emergencies: 0 };
     if (type === 'call')      map[date].calls      = row.count;
-    if (type === 'message')   map[date].messages   = row.count;
+    if (type === 'message' || type === 'sms') map[date].messages += row.count;
     if (type === 'emergency') map[date].emergencies = row.count;
   }
   return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
@@ -224,7 +224,7 @@ export async function getTopVehicles(limit = 10) {
       $group: {
         _id: '$vehicle_id',
         totalCalls:       { $sum: { $cond: [{ $eq: ['$type', 'call']      }, 1, 0] } },
-        totalMessages:    { $sum: { $cond: [{ $eq: ['$type', 'message']   }, 1, 0] } },
+        totalMessages:    { $sum: { $cond: [{ $in: ['$type', ['message', 'sms']] }, 1, 0] } },
         totalEmergencies: { $sum: { $cond: [{ $eq: ['$type', 'emergency'] }, 1, 0] } },
         total:            { $sum: 1 },
       },
