@@ -31,6 +31,14 @@ Anyone scans it → Calls, SMS, or Emergency — without ever seeing your real n
 
 Sampaark replaces your dashboard number with a QR code enabling masked communication — neither party ever sees the other's real phone number.
 
+```mermaid
+flowchart LR
+    A["📱 Old Way\nReal number on dashboard\n❌ No privacy\n❌ No control"] -->|Replace with| B["🔲 Sampaark QR\nMH-12-AB-1234\n✅ Number hidden\n✅ Full control\n✅ Emergency chain"]
+
+    style A fill:#2D0A0A,color:#FF6B6B,stroke:#FF3B5C
+    style B fill:#0A2D1A,color:#00E5A0,stroke:#00E5A0
+```
+
 **How it works:** Sign up → verify vehicle docs → pay ₹499/year → get a signed QR for your dashboard. Anyone scans it with any camera — no app needed — and can Call, SMS, or raise an Emergency, all masked.
 
 ---
@@ -482,8 +490,6 @@ EXOTEL_API_TOKEN=...
 EXOTEL_SID=...
 EXOTEL_VIRTUAL_NUMBER=...
 MOCK_CALLS=true
-EXOTEL_DLT_ENTITY_ID=your_dlt_entity_id
-EXOTEL_DLT_TEMPLATE_ID=your_dlt_template_id
 
 # PayU
 PAYU_KEY=...
