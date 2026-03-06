@@ -1,5 +1,6 @@
 import express from 'express';
-import { createHash } from 'crypto';
+import { wrapRouter } from '../middleware/asyncHandler.js';
+import { createHash, randomBytes } from 'crypto';
 import QRCode from 'qrcode';
 import Vehicle from '../models/Vehicle.js';
 import Payment from '../models/Payment.js';
@@ -152,7 +153,7 @@ router.post('/verify', async (req, res) => {
   vehicle.qr_token      = sig;
   vehicle.qr_image_url  = qrDataUrl;
   vehicle.qr_valid_until = validUntil;
-  vehicle.card_code     = Math.random().toString(36).slice(2, 10).toUpperCase();
+  vehicle.card_code     = randomBytes(5).toString('hex').toUpperCase(); // 10 hex chars, 40 bits entropy
   await vehicle.save();
 
   createNotification(
@@ -253,4 +254,4 @@ router.get('/history/:vehicleId', async (req, res) => {
   res.json({ success: true, payments });
 });
 
-export default router;
+export default wrapRouter(router);

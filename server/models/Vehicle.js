@@ -29,7 +29,7 @@ const vehicleSchema = new mongoose.Schema(
     },
     flagged_for_review: { type: Boolean, default: false },
     qr_valid_until:     { type: Date,    default: null },
-    card_code:          { type: String,  default: null },
+    card_code:          { type: String,  unique: true, sparse: true, default: null },
     emergency_contacts: [
       {
         phone_encrypted: { type: String, required: true },

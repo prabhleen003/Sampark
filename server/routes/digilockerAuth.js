@@ -7,6 +7,7 @@
  */
 
 import express from 'express';
+import { wrapRouter } from '../middleware/asyncHandler.js';
 import Vehicle from '../models/Vehicle.js';
 import User from '../models/User.js';
 import authMiddleware from '../middleware/auth.js';
@@ -102,4 +103,4 @@ router.get('/callback', async (req, res) => {
   res.redirect(`${FRONTEND_URL}/dashboard?digilocker=success&vehicleId=${vehicleId}`);
 });
 
-export default router;
+export default wrapRouter(router);

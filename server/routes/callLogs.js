@@ -1,4 +1,5 @@
 import express from 'express';
+import { wrapRouter } from '../middleware/asyncHandler.js';
 import CallLog     from '../models/CallLog.js';
 import Vehicle     from '../models/Vehicle.js';
 import AbuseReport from '../models/AbuseReport.js';
@@ -112,4 +113,4 @@ router.post('/:logId/report', authMiddleware, async (req, res) => {
   );
 });
 
-export default router;
+export default wrapRouter(router);

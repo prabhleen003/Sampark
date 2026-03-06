@@ -22,7 +22,7 @@ export async function checkQrExpiry(userId) {
     // Find verified vehicles belonging to this user whose QR is expiring soon
     const vehicles = await Vehicle.find({
       user_id:       userId,
-      status:        'approved',
+      status:        'verified',
       qr_valid_until: { $gt: now, $lt: cutoff },
     }).select('_id plate_number qr_valid_until');
 

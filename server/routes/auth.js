@@ -1,4 +1,5 @@
 import express from 'express';
+import { wrapRouter } from '../middleware/asyncHandler.js';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { generateOtp, storeOtp, verifyOtp, canSendOtp, recordOtpSend } from '../utils/otp.js';
@@ -133,4 +134,4 @@ router.post('/firebase-verify', async (req, res) => {
   res.json({ success: true, token, isNewUser });
 });
 
-export default router;
+export default wrapRouter(router);

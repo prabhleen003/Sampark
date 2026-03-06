@@ -1,4 +1,5 @@
 import express from 'express';
+import { wrapRouter } from '../middleware/asyncHandler.js';
 import Vehicle      from '../models/Vehicle.js';
 import User         from '../models/User.js';
 import Order        from '../models/Order.js';
@@ -745,4 +746,4 @@ router.put('/support/:ticketId/priority', async (req, res) => {
   res.json({ success: true, ticket });
 });
 
-export default router;
+export default wrapRouter(router);

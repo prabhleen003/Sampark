@@ -1,4 +1,5 @@
 import express from 'express';
+import { wrapRouter } from '../middleware/asyncHandler.js';
 import Notification from '../models/Notification.js';
 
 const router = express.Router();
@@ -55,4 +56,4 @@ router.put('/:id/read', async (req, res) => {
   res.json({ success: true });
 });
 
-export default router;
+export default wrapRouter(router);

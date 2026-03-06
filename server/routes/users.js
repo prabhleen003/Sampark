@@ -1,4 +1,5 @@
 import express from 'express';
+import { wrapRouter } from '../middleware/asyncHandler.js';
 import User from '../models/User.js';
 import authMiddleware from '../middleware/auth.js';
 import { checkQrExpiry }      from '../utils/expiryChecker.js';
@@ -38,4 +39,4 @@ router.put('/me', authMiddleware, async (req, res) => {
   res.json({ success: true, user });
 });
 
-export default router;
+export default wrapRouter(router);

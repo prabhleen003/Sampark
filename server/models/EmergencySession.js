@@ -12,7 +12,7 @@ const STAGES = [
 const emergencySessionSchema = new mongoose.Schema(
   {
     vehicle_id:   { type: mongoose.Schema.Types.ObjectId, ref: 'Vehicle', index: true, required: true },
-    caller_phone: { type: String, required: true },
+    caller_phone_encrypted: { type: String, required: true },
     description:  { type: String, default: null },
     stage:        { type: String, enum: STAGES, default: 'calling_owner' },
     connected_to: { type: String, default: null }, // 'owner' | 'contact_1' | 'contact_2' | 'contact_3'

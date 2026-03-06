@@ -1,4 +1,5 @@
 import express from 'express';
+import { wrapRouter } from '../middleware/asyncHandler.js';
 import crypto from 'crypto';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -181,4 +182,4 @@ router.post('/:ticketId/reopen', authMiddleware, async (req, res) => {
   res.json({ success: true, ticket });
 });
 
-export default router;
+export default wrapRouter(router);

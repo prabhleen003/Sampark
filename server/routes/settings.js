@@ -3,6 +3,7 @@
  * Mounted at /api/v1/users.
  */
 import express from 'express';
+import { wrapRouter } from '../middleware/asyncHandler.js';
 import { createHash } from 'crypto';
 import User       from '../models/User.js';
 import Vehicle    from '../models/Vehicle.js';
@@ -281,10 +282,13 @@ router.delete('/me', async (req, res) => {
       deleted_at:           new Date(),
       token_invalidated_at: new Date(),
     }),
-    // Deactivate all QR codes
+    // Deactivate all QR codes — deactivated_at must be set so the partial
+    // unique index (partialFilterExpression: { deactivated_at: null }) excludes
+    // these vehicles, allowing the plate to be re-registered later.
     Vehicle.updateMany(
       { user_id: userId },
-      { qr_token: null, qr_image_url: null, status: 'deactivated', emergency_contacts: [] }
+      { qr_token: null, qr_image_url: null, status: 'deactivated', emergency_contacts: [],
+        deactivated_at: new Date(), deactivation_reason: 'account_deleted' }
     ),
     // Cancel pending orders
     Order.updateMany(
@@ -331,4 +335,4 @@ router.get('/me/privacy-score', async (req, res) => {
   });
 });
 
-export default router;
+export default wrapRouter(router);

@@ -7,6 +7,7 @@
  *   - Per caller+vehicle: max 3 calls per hour
  *   - Per vehicle (all callers): max 15 calls per calendar day
  *   - Per IP+vehicle: max 5 calls per hour (bypass-resistant secondary check)
+ *   - Per IP sms-lookup: max 10 attempts per hour (brute-force guard on card_code lookup)
  */
 
 // key: `${callerPhone}:${vehicleId}` → [timestamp, ...]
@@ -18,10 +19,14 @@ const vehicleMap = new Map();
 // key: `${ip}:${vehicleId}` → [timestamp, ...]  — IP-based secondary limiter
 const ipMap = new Map();
 
-const CALLER_LIMIT  = 3;
-const VEHICLE_LIMIT = 15;
-const IP_LIMIT      = 5;  // slightly higher than phone limit to allow shared IPs (offices)
-const ONE_HOUR_MS   = 60 * 60 * 1000;
+// key: `sms-lookup:${ip}` → [timestamp, ...]  — brute-force guard on card_code lookup
+const smsLookupMap = new Map();
+
+const CALLER_LIMIT      = 3;
+const VEHICLE_LIMIT     = 15;
+const IP_LIMIT          = 5;   // slightly higher than phone limit to allow shared IPs (offices)
+const SMS_LOOKUP_LIMIT  = 10;  // per-IP per-hour cap on card_code lookups
+const ONE_HOUR_MS       = 60 * 60 * 1000;
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
@@ -89,4 +94,21 @@ export function checkVehicleRateLimit(vehicleId) {
     count: count + 1,
     limit: VEHICLE_LIMIT,
   };
+}
+
+/**
+ * Returns true if the IP has hit the sms-lookup rate limit.
+ * Registers the attempt if not blocked.
+ */
+export function checkSmsLookupRateLimit(ip) {
+  if (!ip) return false;
+  const key = `sms-lookup:${ip}`;
+  const now = Date.now();
+  const timestamps = (smsLookupMap.get(key) || []).filter(t => now - t < ONE_HOUR_MS);
+
+  if (timestamps.length >= SMS_LOOKUP_LIMIT) return true;
+
+  timestamps.push(now);
+  smsLookupMap.set(key, timestamps);
+  return false;
 }

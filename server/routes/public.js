@@ -1,4 +1,5 @@
 import express from 'express';
+import { wrapRouter } from '../middleware/asyncHandler.js';
 import crypto, { randomBytes } from 'crypto';
 import { createRequire } from 'module';
 import Vehicle from '../models/Vehicle.js';
@@ -9,8 +10,8 @@ import PublicReport from '../models/PublicReport.js';
 import ScanLog from '../models/ScanLog.js';
 import { verifySignature } from '../utils/qr.js';
 import { initiateCall, sendMaskedSMS } from '../services/exotel.js';
-import { checkCallerRateLimit, checkVehicleRateLimit, checkIpRateLimit } from '../utils/rateLimit.js';
-import { decryptPhone, hashPhone } from '../utils/encrypt.js';
+import { checkCallerRateLimit, checkVehicleRateLimit, checkIpRateLimit, checkSmsLookupRateLimit } from '../utils/rateLimit.js';
+import { decryptPhone, encryptPhone, hashPhone } from '../utils/encrypt.js';
 import { createNotification } from '../services/notification.js';
 import { isCallerBlocked } from '../utils/callerProfile.js';
 
@@ -100,6 +101,10 @@ router.get('/:vehicleId', async (req, res) => {
 
 // POST /api/v1/v/sms-lookup — look up vehicle by card_code (SMS fallback, must be before /:vehicleId)
 router.post('/sms-lookup', async (req, res) => {
+  if (checkSmsLookupRateLimit(req.ip)) {
+    return res.status(429).json({ success: false, message: 'Too many lookup attempts. Try again later.' });
+  }
+
   const { card_code } = req.body;
   if (!card_code?.trim()) {
     return res.status(400).json({ success: false, message: 'card_code is required' });
@@ -719,10 +724,10 @@ router.post('/:vehicleId/emergency', async (req, res) => {
   const contacts = [...vehicle.emergency_contacts].sort((a, b) => a.priority - b.priority);
 
   const session = await EmergencySession.create({
-    vehicle_id:             vehicleId,
-    caller_phone,
-    description:            description || null,
-    stage:                  'calling_owner',
+    vehicle_id:               vehicleId,
+    caller_phone_encrypted:   encryptPhone(caller_phone),
+    description:              description || null,
+    stage:                    'calling_owner',
     blocked_caller_emergency: callerIsBlocked,
   });
 
@@ -763,4 +768,4 @@ router.get('/:vehicleId/emergency-status/:sessionId', async (req, res) => {
   }
 });
 
-export default router;
+export default wrapRouter(router);

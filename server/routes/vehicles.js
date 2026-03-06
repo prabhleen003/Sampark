@@ -1,4 +1,5 @@
 import express from 'express';
+import { wrapRouter } from '../middleware/asyncHandler.js';
 import Vehicle from '../models/Vehicle.js';
 import Payment from '../models/Payment.js';
 import CallLog from '../models/CallLog.js';
@@ -360,4 +361,4 @@ router.delete('/:id/emergency-contacts/:contactId', authMiddleware, async (req, 
   refreshPrivacyScore(req.user.userId);
 });
 
-export default router;
+export default wrapRouter(router);

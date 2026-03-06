@@ -418,6 +418,19 @@ export default function PublicScan() {
           {!isSilent && <button onClick={() => setPanel('sms')} style={btn(C.teal, '#0A0F2C', false)}>💬 Send SMS</button>}
           <button onClick={() => setPanel('emergency')} style={btn(C.danger, '#fff', false)}>🚨 Emergency</button>
         </div>
+        {/* Indian Emergency Helplines */}
+        <div style={{ marginTop: 20, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
+          <p style={{ textAlign: 'center', color: C.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600, margin: '0 0 10px' }}>Emergency Helplines</p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <a href="tel:100" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, textDecoration: 'none', background: 'rgba(59,130,246,0.12)', border: `1px solid rgba(59,130,246,0.35)`, borderRadius: 10, padding: '11px 8px', color: '#60A5FA', fontWeight: 700, fontSize: 15 }}>
+              🚔 Police <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13 }}>100</span>
+            </a>
+            <a href="tel:108" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, textDecoration: 'none', background: 'rgba(239,68,68,0.12)', border: `1px solid rgba(239,68,68,0.35)`, borderRadius: 10, padding: '11px 8px', color: '#F87171', fontWeight: 700, fontSize: 15 }}>
+              🚑 Ambulance <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13 }}>108</span>
+            </a>
+          </div>
+        </div>
+
         <div style={{ textAlign: 'center', marginTop: 14 }}>
           <button onClick={() => setPanel('report')} style={{ border: 'none', background: 'none', color: C.textSecondary, textDecoration: 'underline', cursor: 'pointer' }}>Report an issue</button>
         </div>

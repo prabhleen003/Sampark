@@ -1,4 +1,5 @@
 import express from 'express';
+import { wrapRouter } from '../middleware/asyncHandler.js';
 import { createHash } from 'crypto';
 import Vehicle from '../models/Vehicle.js';
 import Payment from '../models/Payment.js';
@@ -159,4 +160,4 @@ router.get('/:id', async (req, res) => {
   res.json({ success: true, order });
 });
 
-export default router;
+export default wrapRouter(router);

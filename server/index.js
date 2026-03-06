@@ -185,6 +185,27 @@ app.post('/api/v1/webhooks/exotel-sms', express.urlencoded({ extended: false }),
   }
 });
 
+// Global error handler — catches errors forwarded via next(err) from any route,
+// including async handlers wrapped with asyncHandler / wrapRouter.
+// Must be registered after all routes and webhooks.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  // Mongoose bad ObjectId / cast failure → treat as 400 Not Found
+  if (err.name === 'CastError' && err.kind === 'ObjectId') {
+    return res.status(400).json({ success: false, message: 'Invalid ID format' });
+  }
+  // Mongoose duplicate-key (unique index violation)
+  if (err.code === 11000) {
+    return res.status(409).json({ success: false, message: 'Duplicate entry' });
+  }
+  // Multer file-type / size errors (user-facing)
+  if (err.message && (err.message.includes('Only') || err.message.includes('File too large'))) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+  console.error('[unhandled error]', err);
+  res.status(500).json({ success: false, message: 'Internal server error' });
+});
+
 // MongoDB connection
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {

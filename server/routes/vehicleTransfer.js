@@ -1,4 +1,5 @@
 import express from 'express';
+import { wrapRouter } from '../middleware/asyncHandler.js';
 import crypto from 'crypto';
 import Vehicle from '../models/Vehicle.js';
 import Order from '../models/Order.js';
@@ -283,4 +284,4 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-export default router;
+export default wrapRouter(router);
