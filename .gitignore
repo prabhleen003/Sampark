@@ -11,6 +11,10 @@ client/.env
 # Build output
 client/dist/
 
+# Uploaded user documents — never commit KYC files
+server/uploads/*
+!server/uploads/.gitkeep
+
 # Logs
 *.log
 npm-debug.log*

@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { randomBytes } from 'crypto';
+import jwt from 'jsonwebtoken';
 import authRoutes from './routes/auth.js';
 import digilockerAuthRoutes from './routes/digilockerAuth.js';
 import userRoutes from './routes/users.js';
@@ -29,6 +30,10 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Trust the first proxy hop so req.ip reflects the real client IP behind nginx / Render / Railway.
+// 'false' in dev means req.ip = 127.0.0.1 (no proxy present).
+app.set('trust proxy', process.env.NODE_ENV === 'production' ? 1 : false);
+
 // Middleware
 app.use(cors({
   origin: 'http://localhost:5173',
@@ -44,8 +49,29 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Static file serving for uploaded documents
-app.use('/uploads', express.static('uploads'));
+// Static file serving for uploaded documents — auth-gated.
+// Accepts JWT from Authorization header OR ?token= query param (needed for <img src> / PDF links).
+// Any valid authenticated user may access uploads; unauthenticated requests are rejected.
+function uploadsAuth(req, res, next) {
+  const raw = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.split(' ')[1]
+    : req.query.token;
+
+  if (!raw) return res.status(401).json({ message: 'Authentication required' });
+
+  try {
+    jwt.verify(raw, process.env.JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ message: 'Invalid or expired token' });
+  }
+}
+
+app.use('/uploads', uploadsAuth, express.static('uploads', {
+  setHeaders(res) {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  },
+}));
 
 // Routes
 app.use('/api/v1/auth', authRoutes);
@@ -62,8 +88,24 @@ app.use('/api/v1/orders',        authMiddleware, orderRoutes);
 app.use('/api/v1/notifications', authMiddleware, notificationRoutes);
 app.use('/api/v1/support', supportRoutes);          // /faq is public; auth enforced per-route
 
+// Exotel webhook authentication middleware.
+// Configure Exotel to POST to: /api/v1/webhooks/exotel?token=<EXOTEL_WEBHOOK_SECRET>
+// In dev (EXOTEL_WEBHOOK_SECRET not set), allow through with a warning.
+function verifyExotelWebhook(req, res, next) {
+  const secret = process.env.EXOTEL_WEBHOOK_SECRET;
+  if (!secret) {
+    console.warn('[webhook] EXOTEL_WEBHOOK_SECRET not set — webhook is unauthenticated');
+    return next();
+  }
+  if (req.query.token !== secret) {
+    console.warn('[webhook] Rejected request with invalid webhook token from', req.ip);
+    return res.sendStatus(403);
+  }
+  next();
+}
+
 // Exotel webhook — no auth, Exotel posts here when call status updates
-app.post('/api/v1/webhooks/exotel', express.urlencoded({ extended: false }), async (req, res) => {
+app.post('/api/v1/webhooks/exotel', express.urlencoded({ extended: false }), verifyExotelWebhook, async (req, res) => {
   const { CallSid, Status, Duration } = req.body;
   if (CallSid) {
     const statusMap = { completed: 'completed', 'no-answer': 'no-answer', busy: 'busy', failed: 'failed' };
@@ -95,7 +137,7 @@ app.post('/api/v1/webhooks/exotel', express.urlencoded({ extended: false }), asy
 });
 
 // Exotel SMS webhook — owner replies to virtual number
-app.post('/api/v1/webhooks/exotel-sms', express.urlencoded({ extended: false }), async (req, res) => {
+app.post('/api/v1/webhooks/exotel-sms', express.urlencoded({ extended: false }), verifyExotelWebhook, async (req, res) => {
   try {
     const { From, Body } = req.body;
     if (!From || !Body) {

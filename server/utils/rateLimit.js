@@ -1,10 +1,12 @@
 /**
- * In-memory rate limiter for call attempts.
+ * In-memory rate limiter for call/SMS attempts.
  * No Redis required — sufficient for single-server dev/demo.
+ * NOTE: resets on restart; replace Maps with Redis for multi-instance production.
  *
  * Limits:
  *   - Per caller+vehicle: max 3 calls per hour
  *   - Per vehicle (all callers): max 15 calls per calendar day
+ *   - Per IP+vehicle: max 5 calls per hour (bypass-resistant secondary check)
  */
 
 // key: `${callerPhone}:${vehicleId}` → [timestamp, ...]
@@ -13,12 +15,34 @@ const callerMap = new Map();
 // key: `${vehicleId}:${YYYY-MM-DD}` → count
 const vehicleMap = new Map();
 
+// key: `${ip}:${vehicleId}` → [timestamp, ...]  — IP-based secondary limiter
+const ipMap = new Map();
+
 const CALLER_LIMIT  = 3;
 const VEHICLE_LIMIT = 15;
+const IP_LIMIT      = 5;  // slightly higher than phone limit to allow shared IPs (offices)
 const ONE_HOUR_MS   = 60 * 60 * 1000;
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+}
+
+/**
+ * Returns true if the IP has hit the per-IP per-vehicle rate limit.
+ * Registers the attempt if not blocked.
+ * Call this alongside checkCallerRateLimit — either can independently block.
+ */
+export function checkIpRateLimit(ip, vehicleId) {
+  if (!ip) return false; // no IP available — don't block, just skip
+  const key = `${ip}:${vehicleId}`;
+  const now = Date.now();
+  const timestamps = (ipMap.get(key) || []).filter(t => now - t < ONE_HOUR_MS);
+
+  if (timestamps.length >= IP_LIMIT) return true;
+
+  timestamps.push(now);
+  ipMap.set(key, timestamps);
+  return false;
 }
 
 /**

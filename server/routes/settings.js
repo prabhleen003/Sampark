@@ -11,7 +11,7 @@ import Payment    from '../models/Payment.js';
 import Order      from '../models/Order.js';
 import Notification from '../models/Notification.js';
 import { uploadAvatar } from '../middleware/upload.js';
-import { generateOtp, storeOtp, verifyOtp } from '../utils/otp.js';
+import { generateOtp, storeOtp, verifyOtp, canSendOtp, recordOtpSend } from '../utils/otp.js';
 import { encryptPhone, hashPhone, decryptPhone } from '../utils/encrypt.js';
 import { calculatePrivacyScore, refreshPrivacyScore } from '../utils/privacyScore.js';
 
@@ -109,6 +109,12 @@ router.post('/me/change-phone', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Enter a valid 10-digit Indian mobile number' });
   }
 
+  // Rate-limit: reuse same send-rate logic as login OTP (3 per 10 min)
+  const rateLimitCheck = canSendOtp(`change:${new_phone}`);
+  if (!rateLimitCheck.allowed) {
+    return res.status(429).json({ success: false, message: rateLimitCheck.reason });
+  }
+
   // Check if the new number is already in use
   const phoneHash = hashPhone(new_phone);
   const existing = await User.findOne({ phone_hash: phoneHash });
@@ -118,6 +124,7 @@ router.post('/me/change-phone', async (req, res) => {
 
   const otp = generateOtp();
   storeOtp(`change:${new_phone}`, otp);
+  recordOtpSend(`change:${new_phone}`);
   console.log(`Phone-change OTP for ${new_phone}: ${otp}`);
 
   const response = { success: true, message: 'OTP sent to new number' };

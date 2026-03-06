@@ -110,6 +110,16 @@ router.post('/verify', async (req, res) => {
     return res.status(403).json({ success: false, message: 'Access denied' });
   }
 
+  // Idempotency guard — replay protection.
+  // A paid txnid is terminal; re-submitting a valid payload must not re-extend validity.
+  if (payment.status === 'paid') {
+    return res.json({ success: true, message: 'Payment already verified.' });
+  }
+  // A failed txnid is also terminal — require a new payment order.
+  if (payment.status === 'failed') {
+    return res.status(400).json({ success: false, message: 'This transaction was already marked failed. Please initiate a new payment.' });
+  }
+
   // Verify PayU response hash
   const expectedHash = payuResponseHash({ status, email, firstname, productinfo, amount, txnid });
   if (expectedHash !== hash) {

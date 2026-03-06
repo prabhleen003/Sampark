@@ -2,12 +2,16 @@ import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'crypt
 
 const ALGORITHM = 'aes-256-ctr';
 
-// Build a stable 32-byte key from env var (pad / truncate)
+// PHONE_ENCRYPT_KEY must be set — no silent fallback to a known default.
+// A missing or weak key would leave all encrypted phone numbers decryptable
+// by anyone with access to the source code.
+if (!process.env.PHONE_ENCRYPT_KEY) {
+  throw new Error('[encrypt] PHONE_ENCRYPT_KEY env var is not set. Refusing to start with no encryption key.');
+}
+
+// Build a stable 32-byte key (pad / truncate to exactly 256 bits)
 const KEY = Buffer.alloc(32);
-Buffer.from(
-  process.env.PHONE_ENCRYPT_KEY || 'sampaark-phone-encryption-key-32',
-  'utf8'
-).copy(KEY, 0, 0, 32);
+Buffer.from(process.env.PHONE_ENCRYPT_KEY, 'utf8').copy(KEY, 0, 0, 32);
 
 /**
  * Encrypt a plain phone number.

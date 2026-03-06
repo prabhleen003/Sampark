@@ -5,6 +5,7 @@ const otpSendLog = new Map(); // phone -> array of send timestamps
 const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 const OTP_SEND_LIMIT = 3; // max sends
 const OTP_SEND_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const OTP_MAX_ATTEMPTS = 5; // failed guesses before OTP is invalidated
 
 export function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -50,17 +51,29 @@ export function storeOtp(phone, otp) {
   otpStore.set(phone, {
     otp,
     expiresAt: Date.now() + OTP_EXPIRY_MS,
+    attempts: 0,
   });
 }
 
 export function verifyOtp(phone, otp) {
   const record = otpStore.get(phone);
-  if (!record) return { valid: false, reason: 'OTP not found' };
+  if (!record) return { valid: false, reason: 'OTP not found or already used' };
   if (Date.now() > record.expiresAt) {
     otpStore.delete(phone);
     return { valid: false, reason: 'OTP expired' };
   }
-  if (record.otp !== otp) return { valid: false, reason: 'Invalid OTP' };
+  if (record.attempts >= OTP_MAX_ATTEMPTS) {
+    otpStore.delete(phone);
+    return { valid: false, reason: 'Too many incorrect attempts. Please request a new OTP.' };
+  }
+  if (record.otp !== otp) {
+    record.attempts += 1;
+    if (record.attempts >= OTP_MAX_ATTEMPTS) {
+      otpStore.delete(phone);
+      return { valid: false, reason: 'Too many incorrect attempts. Please request a new OTP.' };
+    }
+    return { valid: false, reason: `Invalid OTP. ${OTP_MAX_ATTEMPTS - record.attempts} attempt(s) remaining.` };
+  }
   otpStore.delete(phone); // one-time use
   return { valid: true };
 }

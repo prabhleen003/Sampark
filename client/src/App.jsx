@@ -34,21 +34,30 @@ function PrivateRoute({ children }) {
 
 function PageLoader() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900">
-      <div className="w-8 h-8 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0A0F2C' }}>
+      <div style={{
+        width: 32, height: 32,
+        border: '2px solid #00E5A0',
+        borderTopColor: 'transparent',
+        borderRadius: '50%',
+        animation: 'spin 0.7s linear infinite',
+      }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
 function ScanPageLoader() {
+  const shimmer = { backgroundColor: '#E2E8F0', borderRadius: 8, animation: 'pulse 1.5s ease-in-out infinite' };
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-white p-6">
-      <div className="w-48 h-8 bg-gray-200 rounded animate-pulse mb-8" />
-      <div className="w-full max-w-sm space-y-4">
-        <div className="h-14 bg-gray-200 rounded-lg animate-pulse" />
-        <div className="h-14 bg-gray-200 rounded-lg animate-pulse" />
-        <div className="h-14 bg-gray-200 rounded-lg animate-pulse" />
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff', padding: '1.5rem' }}>
+      <div style={{ ...shimmer, width: 192, height: 32, marginBottom: 32 }} />
+      <div style={{ width: '100%', maxWidth: 384, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ ...shimmer, height: 56 }} />
+        <div style={{ ...shimmer, height: 56 }} />
+        <div style={{ ...shimmer, height: 56 }} />
       </div>
+      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }`}</style>
     </div>
   );
 }

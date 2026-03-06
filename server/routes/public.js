@@ -9,7 +9,7 @@ import PublicReport from '../models/PublicReport.js';
 import ScanLog from '../models/ScanLog.js';
 import { verifySignature } from '../utils/qr.js';
 import { initiateCall, sendMaskedSMS } from '../services/exotel.js';
-import { checkCallerRateLimit, checkVehicleRateLimit } from '../utils/rateLimit.js';
+import { checkCallerRateLimit, checkVehicleRateLimit, checkIpRateLimit } from '../utils/rateLimit.js';
 import { decryptPhone, hashPhone } from '../utils/encrypt.js';
 import { createNotification } from '../services/notification.js';
 import { isCallerBlocked } from '../utils/callerProfile.js';
@@ -204,7 +204,11 @@ router.post('/:vehicleId/report', async (req, res) => {
 });
 
 // GET /api/v1/v/:vehicleId/sms-templates — public SMS template list
-router.get('/:vehicleId/sms-templates', (req, res) => {
+router.get('/:vehicleId/sms-templates', async (req, res) => {
+  const { sig } = req.query;
+  if (!sig || !(await verifySignature(req.params.vehicleId, sig))) {
+    return res.status(403).json({ success: false, message: 'Invalid or expired QR code' });
+  }
   res.json(smsTemplates);
 });
 
@@ -251,7 +255,7 @@ router.post('/:vehicleId/sms', async (req, res) => {
     type: 'sms',
     created_at: { $gte: oneHourAgo },
   });
-  if (recentSMS >= 5) {
+  if (recentSMS >= 5 || checkIpRateLimit(req.ip, vehicleId)) {
     return res.status(429).json({ error: 'Too many messages. Try again later.' });
   }
 
@@ -285,7 +289,6 @@ router.post('/:vehicleId/sms', async (req, res) => {
     sms_status: smsResult.status,
     message_text: messageText,
     message_template: template_id || null,
-    custom_text: messageText,
     status: smsResult.status === 'sent' ? 'completed' : 'failed',
   });
 
@@ -375,7 +378,7 @@ router.post('/:vehicleId/message', async (req, res) => {
     vehicleId,
     '/dashboard',
     { template_id: template_id || null, log_id: log._id.toString() }
-  );
+  ).catch(e => console.error('Notification error (message):', e.message));
 
   res.status(201).json({ success: true, message: 'Message sent to vehicle owner', log_id: log._id });
 });
@@ -411,8 +414,8 @@ router.post('/:vehicleId/call', async (req, res) => {
     return res.status(403).json({ success: false, message: 'You are unable to contact this vehicle at this time.' });
   }
 
-  // 5. Per-caller rate limit (3 calls/hour to this vehicle)
-  if (checkCallerRateLimit(caller_phone, vehicleId)) {
+  // 5. Per-caller rate limit (3 calls/hour) + per-IP rate limit (5/hour, bypass-resistant)
+  if (checkCallerRateLimit(caller_phone, vehicleId) || checkIpRateLimit(req.ip, vehicleId)) {
     return res.status(429).json({ success: false, message: 'Too many call attempts. Try again later.' });
   }
 
@@ -504,8 +507,12 @@ router.get('/:vehicleId/call-status/:callLogId', async (req, res) => {
       response.fallback_token = log.fallback_token;
     }
     res.json(response);
-  } catch {
-    res.status(400).json({ success: false, message: 'Invalid call ID' });
+  } catch (err) {
+    if (err.name === 'CastError') {
+      return res.status(400).json({ success: false, message: 'Invalid call ID' });
+    }
+    console.error('call-status error:', err.message);
+    res.status(500).json({ success: false, message: 'Failed to retrieve call status' });
   }
 });
 
@@ -517,9 +524,9 @@ router.post('/:vehicleId/fallback-message', async (req, res) => {
   if (!fallback_token) return res.status(400).json({ success: false, message: 'Token required' });
   if (!message?.trim()) return res.status(400).json({ success: false, message: 'Message is required' });
   if (message.trim().length > 160) return res.status(400).json({ success: false, message: 'Message must be 160 characters or less' });
-  if (!caller_phone || !INDIAN_PHONE_RE.test(caller_phone)) {
-    return res.status(400).json({ success: false, message: 'Valid caller phone is required' });
-  }
+
+  // caller_phone is optional — if absent, message is still recorded but no SMS is sent
+  const hasCallerPhone = caller_phone && INDIAN_PHONE_RE.test(caller_phone);
 
   const VALID_URGENCIES = ['normal', 'urgent', 'emergency'];
   const urgencyValue = VALID_URGENCIES.includes(urgency) ? urgency : 'urgent';
@@ -538,6 +545,10 @@ router.post('/:vehicleId/fallback-message', async (req, res) => {
   log.fallback_urgency    = urgencyValue;
   log.fallback_token_used = true;
   await log.save();
+
+  if (!hasCallerPhone) {
+    return res.json({ success: true, sms_status: 'skipped' });
+  }
 
   const vehicle = await Vehicle.findById(vehicleId).select('plate_number user_id');
   if (!vehicle) {
@@ -566,7 +577,6 @@ router.post('/:vehicleId/fallback-message', async (req, res) => {
     sms_sid: smsResult.sid,
     sms_status: smsResult.status,
     message_text: fallbackSMS,
-    custom_text: message.trim(),
     status: smsResult.status === 'sent' ? 'completed' : 'failed',
   });
 
@@ -723,7 +733,7 @@ router.post('/:vehicleId/emergency', async (req, res) => {
     vehicleId,
     '/dashboard',
     { session_id: session._id.toString(), caller_phone_partial: caller_phone.slice(-4) }
-  );
+  ).catch(e => console.error('Notification error (emergency):', e.message));
 
   // Fire-and-forget — chain runs asynchronously while client polls
   runEmergencyChain(

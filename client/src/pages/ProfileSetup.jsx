@@ -82,7 +82,7 @@ export default function ProfileSetup() {
           boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.1)',
         }}
       >
-        <div className="flex flex-col items-center mb-8" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem' }}>
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
