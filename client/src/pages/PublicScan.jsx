@@ -378,7 +378,7 @@ export default function PublicScan() {
         if (d.deactivated) return setState('deactivated');
         if (d.transferring) return setState('transferring');
         setState('ok');
-        const tpl = await fetch(`${base}/sms-templates`).then(r => r.json()).catch(() => null);
+        const tpl = await fetch(`${base}/sms-templates?sig=${encodeURIComponent(sig)}`).then(r => r.json()).catch(() => null);
         if (Array.isArray(tpl)) setTemplates(tpl);
       })
       .catch(e => {

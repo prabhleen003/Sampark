@@ -60,14 +60,10 @@ router.get('/callback', async (req, res) => {
   const result = await digilocker.handleCallback(code, state, vehicle, user);
 
   if (!result.verified) {
-    vehicle.status             = 'verification_failed';
-    vehicle.rejection_reason   = result.reason;
+    // DigiLocker could not verify — user can re-upload and retry (no admin gate)
+    vehicle.status           = 'verification_failed';
+    vehicle.rejection_reason = result.reason;
     vehicle.verification_failed_count = (vehicle.verification_failed_count || 0) + 1;
-    
-    // Flag for manual review only after 2 failed attempts
-    if (vehicle.verification_failed_count >= 2) {
-      vehicle.needs_manual_review = true;
-    }
     await vehicle.save();
 
     createNotification(

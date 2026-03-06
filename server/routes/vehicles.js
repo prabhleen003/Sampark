@@ -1,4 +1,5 @@
 import express from 'express';
+import { randomBytes } from 'crypto';
 import { wrapRouter } from '../middleware/asyncHandler.js';
 import Vehicle from '../models/Vehicle.js';
 import Payment from '../models/Payment.js';
@@ -100,27 +101,17 @@ router.post('/', authMiddleware, (req, res) => {
 
       res.status(201).json({ success: true, vehicle, next_step: 'payment' });
     } else {
-      // Verification failed — increment attempt counter
-      vehicle.status             = 'verification_failed';
-      vehicle.rejection_reason   = result.reason;
+      // Verification failed — user can re-upload and retry (no admin gate)
+      vehicle.status           = 'verification_failed';
+      vehicle.rejection_reason = result.reason;
       vehicle.verification_failed_count = (vehicle.verification_failed_count || 0) + 1;
-      
-      // Flag for manual review only after 2 failed attempts
-      if (vehicle.verification_failed_count >= 2) {
-        vehicle.needs_manual_review = true;
-      }
       await vehicle.save();
-
-      const nextStep = vehicle.needs_manual_review ? 'manual_review' : 'resubmit';
-      const message = vehicle.needs_manual_review 
-        ? result.reason 
-        : `Verification failed. ${2 - vehicle.verification_failed_count} attempt(s) remaining before manual review.`;
 
       res.status(201).json({
         success: true,
         vehicle,
-        next_step: nextStep,
-        message,
+        next_step: 'resubmit',
+        message: result.reason,
       });
     }
 
@@ -225,7 +216,7 @@ router.get('/:id/qr-card', authMiddleware, async (req, res) => {
   }
   // Lazy card_code generation for vehicles that predate Step 8
   if (!vehicle.card_code) {
-    vehicle.card_code = Math.random().toString(36).slice(2, 10).toUpperCase();
+    vehicle.card_code = randomBytes(5).toString('hex').toUpperCase();
     await vehicle.save();
   }
   res.json({
@@ -278,23 +269,13 @@ router.put('/:id', authMiddleware, (req, res) => {
       await vehicle.save();
       res.json({ success: true, vehicle, next_step: 'payment' });
     } else {
-      // Verification failed — increment attempt counter
-      vehicle.status              = 'verification_failed';
-      vehicle.rejection_reason    = result.reason;
+      // Verification failed — user can re-upload and retry (no admin gate)
+      vehicle.status           = 'verification_failed';
+      vehicle.rejection_reason = result.reason;
       vehicle.verification_failed_count = (vehicle.verification_failed_count || 0) + 1;
-      
-      // Flag for manual review only after 2 failed attempts
-      if (vehicle.verification_failed_count >= 2) {
-        vehicle.needs_manual_review = true;
-      }
       await vehicle.save();
-      
-      const nextStep = vehicle.needs_manual_review ? 'manual_review' : 'resubmit';
-      const message = vehicle.needs_manual_review 
-        ? result.reason 
-        : `Verification failed. ${2 - vehicle.verification_failed_count} attempt(s) remaining before manual review.`;
-      
-      res.json({ success: true, vehicle, next_step: nextStep, message });
+
+      res.json({ success: true, vehicle, next_step: 'resubmit', message: result.reason });
     }
 
     refreshPrivacyScore(req.user.userId);

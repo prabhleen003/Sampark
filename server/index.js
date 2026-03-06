@@ -106,34 +106,39 @@ function verifyExotelWebhook(req, res, next) {
 
 // Exotel webhook — no auth, Exotel posts here when call status updates
 app.post('/api/v1/webhooks/exotel', express.urlencoded({ extended: false }), verifyExotelWebhook, async (req, res) => {
-  const { CallSid, Status, Duration } = req.body;
-  if (CallSid) {
-    const statusMap = { completed: 'completed', 'no-answer': 'no-answer', busy: 'busy', failed: 'failed' };
-    const mapped = statusMap[Status?.toLowerCase()] || null;
-    if (mapped) {
-      const update = { status: mapped, duration_seconds: parseInt(Duration) || null };
-      const isMissed = ['no-answer', 'busy', 'failed'].includes(mapped);
-      if (isMissed) {
-        update.fallback_token   = randomBytes(16).toString('hex');
-        update.fallback_expires = new Date(Date.now() + 15 * 60 * 1000);
-      }
-      const log = await CallLog.findOneAndUpdate({ exotel_sid: CallSid }, update, { new: true });
-      if (isMissed && log) {
-        const v = await Vehicle.findById(log.vehicle_id).select('user_id plate_number');
-        if (v) {
-          createNotification(
-            v.user_id, 'missed_call',
-            `Missed call on ${v.plate_number}`,
-            'Someone tried to reach you via your QR code but the call wasn\'t answered.',
-            v._id,
-            '/dashboard',
-            { call_sid: CallSid, outcome: mapped, log_id: log._id.toString() }
-          );
+  try {
+    const { CallSid, Status, Duration } = req.body;
+    if (CallSid) {
+      const statusMap = { completed: 'completed', 'no-answer': 'no-answer', busy: 'busy', failed: 'failed' };
+      const mapped = statusMap[Status?.toLowerCase()] || null;
+      if (mapped) {
+        const update = { status: mapped, duration_seconds: parseInt(Duration) || null };
+        const isMissed = ['no-answer', 'busy', 'failed'].includes(mapped);
+        if (isMissed) {
+          update.fallback_token   = randomBytes(16).toString('hex');
+          update.fallback_expires = new Date(Date.now() + 15 * 60 * 1000);
+        }
+        const log = await CallLog.findOneAndUpdate({ exotel_sid: CallSid }, update, { new: true });
+        if (isMissed && log) {
+          const v = await Vehicle.findById(log.vehicle_id).select('user_id plate_number');
+          if (v) {
+            createNotification(
+              v.user_id, 'missed_call',
+              `Missed call on ${v.plate_number}`,
+              'Someone tried to reach you via your QR code but the call wasn\'t answered.',
+              v._id,
+              '/dashboard',
+              { call_sid: CallSid, outcome: mapped, log_id: log._id.toString() }
+            );
+          }
         }
       }
     }
+    res.sendStatus(200);
+  } catch (err) {
+    console.error('[EXOTEL WEBHOOK ERROR]', err);
+    res.sendStatus(500);
   }
-  res.sendStatus(200);
 });
 
 // Exotel SMS webhook — owner replies to virtual number
