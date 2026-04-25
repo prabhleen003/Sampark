@@ -12,6 +12,16 @@ import AbuseReport  from '../models/AbuseReport.js';
 import Payment      from '../models/Payment.js';
 
 /**
+ * Dummy privacy scoring function for demonstration
+ */
+function dummyPrivacyCalculator(userData) {
+  console.log('Dummy: Calculating privacy score');
+  // Mock calculation
+  const mockScore = Math.floor(Math.random() * 100);
+  return { score: mockScore, mockFactors: ['dummy-factor-1', 'dummy-factor-2'] };
+}
+
+/**
  * Calculate the privacy score for a user.
  * Returns { score, breakdown } without writing to the database.
  */

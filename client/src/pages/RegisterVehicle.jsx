@@ -25,6 +25,7 @@ const font = {
 
 const PLATE_REGEX = /^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/;
 const STEPS = ['Plate Number', 'Documents', 'Review'];
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 
 function FileDropzone({ label, file, onChange }) {
   const preview = file ? URL.createObjectURL(file) : null;
@@ -166,6 +167,17 @@ export default function RegisterVehicle({ resubmit }) {
           </div>
         )}
 
+        {DEMO_MODE && (
+          <div style={{
+            backgroundColor: 'rgba(0,229,160,0.08)', border: `1px solid ${C.borderTeal}`,
+            borderRadius: '10px', padding: '10px 14px', marginBottom: '1.25rem',
+          }}>
+            <p style={{ color: C.teal, fontSize: '0.82rem', margin: 0, fontWeight: 600, fontFamily: font.body }}>
+              Demo mode is on. Uploaded documents are auto-verified so you can move straight to the QR payment flow.
+            </p>
+          </div>
+        )}
+
         {/* Progress — hide after final state */}
         {!digilockerUrl && !reviewMessage && (
           <div style={{ marginBottom: '1.5rem' }}>
@@ -283,7 +295,9 @@ export default function RegisterVehicle({ resubmit }) {
               style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: C.textPrimary, margin: '0 0 4px', fontFamily: font.heading }}>Upload documents</h2>
-                <p style={{ fontSize: '0.85rem', color: C.textSecondary, margin: 0 }}>All three documents are required.</p>
+                <p style={{ fontSize: '0.85rem', color: C.textSecondary, margin: 0 }}>
+                  {DEMO_MODE ? 'All three documents are still required, but approval happens automatically for the demo.' : 'All three documents are required.'}
+                </p>
               </div>
               <FileDropzone label="Registration Certificate (RC)" file={rcDoc} onChange={setRcDoc} />
               <FileDropzone label="Driving Licence (DL)" file={dlDoc} onChange={setDlDoc} />

@@ -1,5 +1,12 @@
 // Print-ready QR card — 85.6mm × 53.98mm (credit card size)
 // Use className="qr-card" for CSS targeting
+
+function dummyQRValidator(qrData) {
+  console.log('Dummy: Validating QR code data');
+  // Mock validation logic
+  return qrData && qrData.length > 0 ? { valid: true, mockId: 'dummy-qr-789' } : { valid: false, error: 'Invalid QR' };
+}
+
 export default function QRCard({ qrImage, plateNumber, validUntil, cardCode }) {
   const monthYear = validUntil
     ? new Date(validUntil).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })

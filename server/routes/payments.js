@@ -18,6 +18,7 @@ const PAYU_URL    = process.env.PAYU_ENV === 'prod'
   ? 'https://secure.payu.in/_payment'
   : 'https://test.payu.in/_payment';
 const PLAN_AMOUNT = parseFloat(process.env.PAYU_PLAN_AMOUNT) || 499; // in rupees
+const DEMO_MODE   = process.env.DEMO_MODE === 'true';
 
 /**
  * SHA-512 hash for PayU payment request.
@@ -39,6 +40,44 @@ function payuResponseHash({ status, email, firstname, productinfo, amount, txnid
 
 function makeTxnid(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+async function activateQrPayment(payment, userId, mihpayid) {
+  const now        = new Date();
+  const validUntil = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+
+  payment.mihpayid    = mihpayid;
+  payment.status      = 'paid';
+  payment.valid_from  = now;
+  payment.valid_until = validUntil;
+  await payment.save();
+
+  const vehicle = await Vehicle.findById(payment.vehicle_id);
+  if (!vehicle) {
+    throw new Error('Vehicle not found for this payment');
+  }
+
+  const { url, sig } = generateSignedUrl(vehicle._id.toString());
+  const qrDataUrl = await QRCode.toDataURL(url, { width: 400, margin: 2 });
+
+  vehicle.qr_token       = sig;
+  vehicle.qr_image_url   = qrDataUrl;
+  vehicle.qr_valid_until = validUntil;
+  vehicle.card_code      = randomBytes(5).toString('hex').toUpperCase();
+  await vehicle.save();
+
+  createNotification(
+    userId,
+    'payment_success',
+    `QR activated for ${vehicle.plate_number}`,
+    'Payment successful! Download your QR code and stick it on your vehicle.',
+    vehicle._id,
+    '/dashboard',
+    { plate_number: vehicle.plate_number, valid_until: validUntil, txnid: payment.txnid, mihpayid }
+  );
+
+  refreshPrivacyScore(userId);
+  return { vehicle, validUntil };
 }
 
 // POST /api/v1/payments/create-order  (protected)
@@ -82,6 +121,7 @@ router.post('/create-order', async (req, res) => {
 
   res.json({
     success: true,
+    demo_mode: DEMO_MODE,
     payu_url: PAYU_URL,
     key:         PAYU_KEY,
     txnid,
@@ -135,38 +175,57 @@ router.post('/verify', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Payment was not successful' });
   }
 
-  // Mark payment as paid with 1-year validity
-  const now       = new Date();
-  const validUntil = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+  const { vehicle, validUntil } = await activateQrPayment(payment, req.user.userId, mihpayid);
 
-  payment.mihpayid   = mihpayid;
-  payment.status     = 'paid';
-  payment.valid_from = now;
-  payment.valid_until = validUntil;
-  await payment.save();
+  res.json({
+    success: true,
+    demo_mode: false,
+    message: 'Payment successful. QR generated.',
+    vehicle_id: vehicle._id,
+    valid_until: validUntil,
+  });
+});
 
-  // Generate QR for the vehicle
-  const vehicle = await Vehicle.findById(payment.vehicle_id);
-  const { url, sig } = generateSignedUrl(vehicle._id.toString());
-  const qrDataUrl    = await QRCode.toDataURL(url, { width: 400, margin: 2 });
+// POST /api/v1/payments/demo-complete  (protected, demo only)
+router.post('/demo-complete', async (req, res) => {
+  if (!DEMO_MODE) {
+    return res.status(403).json({ success: false, message: 'Demo payment mode is disabled' });
+  }
 
-  vehicle.qr_token      = sig;
-  vehicle.qr_image_url  = qrDataUrl;
-  vehicle.qr_valid_until = validUntil;
-  vehicle.card_code     = randomBytes(5).toString('hex').toUpperCase(); // 10 hex chars, 40 bits entropy
-  await vehicle.save();
+  const { txnid } = req.body;
+  if (!txnid) {
+    return res.status(400).json({ success: false, message: 'Transaction ID is required' });
+  }
 
-  createNotification(
-    req.user.userId, 'payment_success',
-    `QR activated for ${vehicle.plate_number}`,
-    'Payment successful! Download your QR code and stick it on your vehicle.',
-    vehicle._id,
-    '/dashboard',
-    { plate_number: vehicle.plate_number, valid_until: validUntil, txnid, mihpayid }
-  );
+  const payment = await Payment.findOne({ txnid });
+  if (!payment) {
+    return res.status(404).json({ success: false, message: 'Transaction not found' });
+  }
+  if (payment.user_id.toString() !== req.user.userId) {
+    return res.status(403).json({ success: false, message: 'Access denied' });
+  }
+  if (payment.status === 'failed') {
+    return res.status(400).json({ success: false, message: 'This transaction was already marked failed. Please create a new one.' });
+  }
+  if (payment.status === 'paid') {
+    return res.json({
+      success: true,
+      demo_mode: true,
+      message: 'Demo payment already processed.',
+      vehicle_id: payment.vehicle_id,
+    });
+  }
 
-  res.json({ success: true, message: 'Payment successful. QR generated.' });
-  refreshPrivacyScore(req.user.userId);
+  const mihpayid = `DEMO_${Date.now()}`;
+  const { vehicle, validUntil } = await activateQrPayment(payment, req.user.userId, mihpayid);
+
+  res.json({
+    success: true,
+    demo_mode: true,
+    message: 'Demo payment processed. QR generated.',
+    vehicle_id: vehicle._id,
+    valid_until: validUntil,
+  });
 });
 
 // GET /api/v1/payments/status/:vehicleId  (protected)
@@ -228,6 +287,7 @@ router.post('/renew', async (req, res) => {
 
   res.json({
     success: true,
+    demo_mode: DEMO_MODE,
     payu_url: PAYU_URL,
     key:         PAYU_KEY,
     txnid,

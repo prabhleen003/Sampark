@@ -26,6 +26,8 @@ const font = {
   mono: "'JetBrains Mono', monospace",
 };
 
+const DEMO_PAYMENT_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
+
 const ABUSE_REASONS = [
   { value: 'harassment', label: 'Harassment' },
   { value: 'spam', label: 'Spam' },
@@ -55,6 +57,12 @@ function isActivePayment(payment) {
 function daysRemaining(vehicle) {
   if (!vehicle.qr_valid_until) return null;
   return Math.floor((new Date(vehicle.qr_valid_until) - Date.now()) / 86400000);
+}
+
+function dummyAnalyticsTracker(event) {
+  console.log(`Dummy: Tracking event - ${event}`);
+  // Add some mock logic here
+  return { success: true, data: 'Mock analytics data' };
 }
 
 // ── QR Modal ─────────────────────────────────────────────────────────────────
@@ -1192,10 +1200,17 @@ export default function Dashboard() {
 
   async function handlePay(vehicle) {
     setPayErr('');
+    setPaySuccess('');
     setPaying(vehicle._id);
     try {
       const { data } = await api.post('/payments/create-order', { vehicle_id: vehicle._id });
       if (!data.success) throw new Error(data.message);
+
+      if (DEMO_PAYMENT_MODE || data.demo_mode) {
+        setPaying(null);
+        navigate(`/payments/process/${vehicle._id}?txnid=${encodeURIComponent(data.txnid)}`);
+        return;
+      }
 
       window.bolt.launch({
         key:         data.key,
@@ -1271,6 +1286,12 @@ export default function Dashboard() {
     try {
       const { data } = await api.post('/payments/renew', { vehicle_id: vehicle._id });
       if (!data.success) throw new Error(data.message);
+
+      if (DEMO_PAYMENT_MODE || data.demo_mode) {
+        setRenewing(null);
+        navigate(`/payments/process/${vehicle._id}?txnid=${encodeURIComponent(data.txnid)}&renew=1`);
+        return;
+      }
 
       window.bolt.launch({
         key:         data.key,

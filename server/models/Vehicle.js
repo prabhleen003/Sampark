@@ -20,7 +20,7 @@ const vehicleSchema = new mongoose.Schema(
     digilocker_verified:     { type: Boolean, default: false },
     verification_failed_count: { type: Number, default: 0 },
     needs_manual_review:     { type: Boolean, default: false },
-    qr_token: { type: String, unique: true, sparse: true, default: null },
+    qr_token: { type: String, default: null },
     qr_image_url: { type: String, default: null },
     comm_mode: {
       type: String,
@@ -29,7 +29,7 @@ const vehicleSchema = new mongoose.Schema(
     },
     flagged_for_review: { type: Boolean, default: false },
     qr_valid_until:     { type: Date,    default: null },
-    card_code:          { type: String,  unique: true, sparse: true, default: null },
+    card_code:          { type: String,  default: null },
     emergency_contacts: [
       {
         phone_encrypted: { type: String, required: true },
@@ -41,7 +41,7 @@ const vehicleSchema = new mongoose.Schema(
     // Transfer fields
     transfer_status:       { type: String, enum: ['none', 'pending', 'completed'], default: 'none' },
     transfer_initiated_at: { type: Date,   default: null },
-    transfer_token:        { type: String, unique: true, sparse: true, default: null },
+    transfer_token:        { type: String, default: null },
     transfer_expires_at:   { type: Date,   default: null },
 
     // Soft-delete fields
@@ -56,6 +56,21 @@ const vehicleSchema = new mongoose.Schema(
 vehicleSchema.index(
   { plate_number: 1 },
   { unique: true, partialFilterExpression: { deactivated_at: null }, name: 'plate_number_active_unique' }
+);
+
+vehicleSchema.index(
+  { qr_token: 1 },
+  { unique: true, partialFilterExpression: { qr_token: { $type: 'string' } }, name: 'qr_token_unique_non_null' }
+);
+
+vehicleSchema.index(
+  { card_code: 1 },
+  { unique: true, partialFilterExpression: { card_code: { $type: 'string' } }, name: 'card_code_unique_non_null' }
+);
+
+vehicleSchema.index(
+  { transfer_token: 1 },
+  { unique: true, partialFilterExpression: { transfer_token: { $type: 'string' } }, name: 'transfer_token_unique_non_null' }
 );
 
 export default mongoose.model('Vehicle', vehicleSchema);

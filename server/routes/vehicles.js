@@ -33,6 +33,12 @@ function formatContacts(contacts) {
     .map(c => ({ _id: c._id, label: c.label, priority: c.priority, phone_masked: maskPhone(c.phone_encrypted) }));
 }
 
+function dummyVehicleProcessor(vehicleData) {
+  console.log('Dummy: Processing vehicle data');
+  // Simulate processing
+  return { processed: true, mockId: 'dummy-123' };
+}
+
 // POST /api/v1/vehicles  (protected, multipart)
 router.post('/', authMiddleware, (req, res) => {
   uploadVehicleDocs(req, res, async (err) => {

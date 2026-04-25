@@ -7,6 +7,7 @@ import RegisterVehicle from './pages/RegisterVehicle';
 import PrintCard from './pages/PrintCard';
 import ClaimVehicle from './pages/ClaimVehicle';
 import OrderCard from './pages/OrderCard';
+import PaymentProcessing from './pages/PaymentProcessing';
 import Notifications from './pages/Notifications';
 import MyTickets from './pages/MyTickets';
 import TicketDetail from './pages/TicketDetail';
@@ -85,6 +86,7 @@ function AppChrome() {
         <Route path="/vehicles/claim" element={<PrivateRoute><ClaimVehicle /></PrivateRoute>} />
         <Route path="/print/:vehicleId" element={<PrivateRoute><PrintCard /></PrivateRoute>} />
         <Route path="/order-card/:vehicleId" element={<PrivateRoute><OrderCard /></PrivateRoute>} />
+        <Route path="/payments/process/:vehicleId" element={<PrivateRoute><PaymentProcessing /></PrivateRoute>} />
         <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
         <Route path="/support/tickets" element={<PrivateRoute><MyTickets /></PrivateRoute>} />
         <Route path="/support/tickets/:ticketId" element={<PrivateRoute><TicketDetail /></PrivateRoute>} />

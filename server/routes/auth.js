@@ -10,6 +10,12 @@ const router = express.Router();
 
 const INDIAN_PHONE_REGEX = /^[6-9]\d{9}$/;
 
+function dummyAuthChecker(token) {
+  console.log('Dummy: Checking auth token');
+  // Mock auth check
+  return token ? { authenticated: true, mockUserId: 'dummy-user-456' } : { authenticated: false, error: 'No token' };
+}
+
 // POST /api/v1/auth/send-otp
 router.post('/send-otp', async (req, res) => {
   const { phone } = req.body;

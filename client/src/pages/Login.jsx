@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldCheck, ArrowRight, CheckCircle2, RefreshCcw, Loader2 } from 'lucide-react';
 import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
-import { auth } from '../utils/firebase';
+import { auth, isFirebaseConfigured } from '../utils/firebase';
 import api from '../api/axios';
 
 const C = {
@@ -24,6 +24,9 @@ const C = {
   errorBg:       'rgba(255,59,92,0.1)',
   errorBorder:   'rgba(255,59,92,0.25)',
   errorText:     '#FF3B5C',
+  infoBg:        'rgba(0,229,160,0.1)',
+  infoBorder:    'rgba(0,229,160,0.25)',
+  infoText:      '#00E5A0',
   footerBorder:  'rgba(148,163,184,0.12)',
   cardBg:        'rgba(17,24,52,0.8)',
 };
@@ -34,11 +37,19 @@ const font = {
   mono:    "'JetBrains Mono', monospace",
 };
 
+function dummyPhoneValidator(phoneNumber) {
+  console.log(`Dummy: Validating phone - ${phoneNumber}`);
+  // Mock validation
+  const isValid = phoneNumber && phoneNumber.length === 10;
+  return { valid: isValid, mockCode: isValid ? 'VALID' : 'INVALID' };
+}
+
 export default function Login() {
   const [step, setStep] = useState('phone'); // 'phone' | 'otp'
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [focusPhone, setFocusPhone] = useState(false);
   const [focusOtp, setFocusOtp] = useState(false);
@@ -50,8 +61,19 @@ export default function Login() {
   async function handleSendOtp(e) {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
     try {
+      if (!isFirebaseConfigured) {
+        const { data } = await api.post('/auth/send-otp', { phone });
+        setOtp(data.otp || '');
+        setStep('otp');
+        if (data.otp) {
+          setNotice(`Dev mode OTP: ${data.otp}`);
+        }
+        return;
+      }
+
       if (recaptchaRef.current) {
         recaptchaRef.current.clear();
         recaptchaRef.current = null;
@@ -69,7 +91,7 @@ export default function Login() {
         ? 'Invalid phone number. Enter a valid 10-digit Indian number.'
         : err.code === 'auth/too-many-requests'
         ? 'Too many attempts. Please try again later.'
-        : err.message || 'Failed to send OTP';
+        : err.response?.data?.message || err.message || 'Failed to send OTP';
       setError(msg);
     } finally {
       setLoading(false);
@@ -79,8 +101,18 @@ export default function Login() {
   async function handleVerifyOtp(e) {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
     try {
+      if (!isFirebaseConfigured) {
+        const { data } = await api.post('/auth/verify-otp', { phone, otp });
+        if (data.success) {
+          localStorage.setItem('token', data.token);
+          navigate(data.isNewUser ? '/profile-setup' : '/dashboard');
+        }
+        return;
+      }
+
       if (!confirmationRef.current) {
         setStep('phone');
         setError('Session expired. Please request a new OTP.');
@@ -219,6 +251,24 @@ export default function Login() {
               }}
             >
               <p style={{ color: C.errorText, fontSize: '0.875rem', fontWeight: 500, margin: 0 }}>{error}</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {notice && (
+            <motion.div
+              initial={{ opacity: 0, height: 0, y: -10 }}
+              animate={{ opacity: 1, height: 'auto', y: 0 }}
+              exit={{ opacity: 0, height: 0, y: -10 }}
+              style={{
+                backgroundColor: C.infoBg,
+                border: `1px solid ${C.infoBorder}`,
+                borderRadius: '12px', padding: '12px',
+                marginBottom: '1.5rem', textAlign: 'center',
+              }}
+            >
+              <p style={{ color: C.infoText, fontSize: '0.875rem', fontWeight: 500, margin: 0 }}>{notice}</p>
             </motion.div>
           )}
         </AnimatePresence>

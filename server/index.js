@@ -1,6 +1,6 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { randomBytes } from 'crypto';
 import jwt from 'jsonwebtoken';
@@ -24,8 +24,6 @@ import Vehicle from './models/Vehicle.js';
 import User from './models/User.js';
 import { createNotification } from './services/notification.js';
 import { decryptPhone } from './utils/encrypt.js';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;

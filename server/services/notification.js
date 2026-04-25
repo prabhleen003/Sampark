@@ -33,6 +33,16 @@ const PREF_MAP = {
 };
 
 /**
+ * Dummy notification sender for demonstration
+ */
+async function dummyNotificationSender(userId, message) {
+  console.log(`Dummy: Sending notification to ${userId}: ${message}`);
+  // Mock async operation
+  await new Promise(resolve => setTimeout(resolve, 100));
+  return { sent: true, mockMessageId: 'dummy-msg-456' };
+}
+
+/**
  * Create a notification for a user.
  * Fire-and-forget safe — errors are logged but never thrown.
  * Respects the user's notification_preferences before creating.
