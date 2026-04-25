@@ -17,7 +17,8 @@ Anyone scans it → Calls, SMS, or Emergency — without ever seeing your real n
 
 </div>
 
-<img src="images/Home.png">
+<img src="Home.png">
+
 
 ---
 
@@ -32,6 +33,7 @@ Anyone scans it → Calls, SMS, or Emergency — without ever seeing your real n
 ## 💡 The Solution
 
 Sampaark replaces your dashboard number with a QR code enabling masked communication — neither party ever sees the other's real phone number.
+<img src="SamparkCard.png">
 
 ```mermaid
 flowchart LR
