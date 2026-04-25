@@ -17,6 +17,8 @@ Anyone scans it → Calls, SMS, or Emergency — without ever seeing your real n
 
 </div>
 
+<img src="images/Home.png">
+
 ---
 
 ## 🚨 The Problem
